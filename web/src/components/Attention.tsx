@@ -62,11 +62,15 @@ export function Attention({ ponds, incidents, now, offsetHours, selected, onSele
                 <span className="font-mono text-xs text-slate-300">{pond._id}</span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="font-mono text-3xl font-semibold tabular-nums text-white">
+                <span
+                  className={`font-mono text-3xl font-semibold tabular-nums ${
+                    status === "sensor" ? "text-slate-500 line-through decoration-violet-400/70" : "text-white"
+                  }`}
+                >
                   {status === "blind" || !pond.last ? "–" : pond.last.do.toFixed(1)}
                 </span>
-                <span className="text-xs text-slate-400">mg/L</span>
-                {status !== "blind" && pond.forecast && (
+                <span className="text-xs text-slate-400">{status === "sensor" ? "mg/L, probe not trusted" : "mg/L"}</span>
+                {status !== "blind" && status !== "sensor" && pond.forecast && (
                   <span className="ml-auto font-mono text-xs text-slate-400">{perHour(pond.forecast.slope_per_min)}/h</span>
                 )}
               </div>
@@ -160,7 +164,6 @@ function Closed({
       <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Closed tonight · the proof</h3>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2">
         {incidents.map((incident) => {
-          const m = incident.metrics;
           return (
             <li key={incident._id}>
               <button
@@ -179,13 +182,7 @@ function Closed({
                 <div className="mt-0.5 text-slate-200">
                   {CAUSE_LABEL[incident.diagnosis?.cause ?? "unknown"]} · {incident.pond ?? incident.gateway ?? incident.farm}
                 </div>
-                <div className="mt-0.5 text-slate-500">
-                  {incident.status === "dismissed"
-                    ? "nobody woken; cleaning ticket opened"
-                    : m
-                      ? `detected ${seconds(m.mttd_s)} · acted ${seconds(m.time_to_action_s)} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L`
-                      : ""}
-                </div>
+                <div className="mt-0.5 text-slate-500">{proofLine(incident)}</div>
               </button>
             </li>
           );
@@ -193,6 +190,17 @@ function Closed({
       </ul>
     </div>
   );
+}
+
+function proofLine(incident: Incident): string {
+  const m = incident.metrics;
+  if (incident.status === "dismissed") return "nobody woken; cleaning ticket opened";
+  if (!m) return "";
+  if (m.blind_s != null) {
+    const recovered = m.coverage != null ? `${Math.round(m.coverage * 100)}% of readings recovered` : "data back";
+    return `blind ${seconds(m.blind_s)} · ${recovered} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L`;
+  }
+  return `detected ${seconds(m.mttd_s)} · acted ${seconds(m.time_to_action_s)} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L`;
 }
 
 function AllQuiet({ total }: { total: number }) {

@@ -42,9 +42,15 @@ function forecastLine(pond: PondState): [number, number][] {
   return [start, [start[0] + 3_600_000, last.do + forecast.slope_per_min * 60]];
 }
 
-function buildOption(history: HistoryPoint[], pond: PondState, now: number, offsetHours: number): Option {
+function buildOption(
+  history: HistoryPoint[],
+  pond: PondState,
+  now: number,
+  offsetHours: number,
+  trusted: boolean,
+): Option {
   const clock = (ms: number) => hhmm(farmClock(ms, offsetHours));
-  const forecast = forecastLine(pond);
+  const forecast = trusted ? forecastLine(pond) : []; // no forecast from a probe known to be wrong
   const end = Math.max(now + 10 * 60_000, (forecast.at(-1)?.[0] ?? 0) + 5 * 60_000);
   const aerators = Math.max(pond.last?.aerators_on ?? 0, ...history.map((p) => p.running ?? 0), 1);
   const xAxis = {
@@ -170,7 +176,13 @@ function buildOption(history: HistoryPoint[], pond: PondState, now: number, offs
   };
 }
 
-export function DoChart(props: { history: HistoryPoint[]; pond: PondState; now: number; offsetHours: number }) {
+export function DoChart(props: {
+  history: HistoryPoint[];
+  pond: PondState;
+  now: number;
+  offsetHours: number;
+  trusted: boolean;
+}) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
 
@@ -187,11 +199,11 @@ export function DoChart(props: { history: HistoryPoint[]; pond: PondState; now: 
     };
   }, []);
 
-  const { history, pond, now, offsetHours } = props;
+  const { history, pond, now, offsetHours, trusted } = props;
   const tick = Math.floor(now / 10_000) * 10_000; // the clock moves the chart every 10 s, data at once
   useEffect(() => {
-    chart.current?.setOption(buildOption(history, pond, tick, offsetHours), { notMerge: true });
-  }, [history, pond, tick, offsetHours]);
+    chart.current?.setOption(buildOption(history, pond, tick, offsetHours, trusted), { notMerge: true });
+  }, [history, pond, tick, offsetHours, trusted]);
 
   return <div ref={element} className="h-72 w-full" role="img" aria-label={`Dissolved oxygen in ${pond._id} over the last two hours`} />;
 }

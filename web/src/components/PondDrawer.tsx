@@ -24,6 +24,7 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
   const [history, setHistory] = useState<HistoryPoint[] | null>(null);
   const [failed, setFailed] = useState(false);
   const status = effectiveStatus(pond, now);
+  const trusted = status !== "sensor";
 
   useEffect(() => {
     const abort = new AbortController();
@@ -103,14 +104,20 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
       </header>
 
       <dl className="grid grid-cols-4 divide-x divide-night-700 border-b border-night-700">
-        <Stat label="DO now" value={last && status !== "blind" ? last.do.toFixed(2) : "–"} unit="mg/L" />
+        {/* A probe known to be wrong: its oxygen is shown for what it is, and nothing is computed from it. */}
+        <Stat
+          label="DO now"
+          value={last && status !== "blind" ? last.do.toFixed(2) : "–"}
+          unit={trusted ? "mg/L" : "probe, not trusted"}
+          tone={trusted ? "" : "text-slate-500 line-through decoration-violet-400/70"}
+        />
         <Stat
           label="To 3 mg/L"
-          value={status === "blind" ? "–" : minutes == null ? "safe" : minutes <= 0 ? "now" : String(Math.round(minutes))}
-          unit={minutes != null && minutes > 0 && status !== "blind" ? "min" : ""}
-          tone={minutes != null && minutes < 30 ? "text-red-300" : minutes != null && minutes < 60 ? "text-amber-200" : ""}
+          value={!trusted || status === "blind" ? "–" : minutes == null ? "safe" : minutes <= 0 ? "now" : String(Math.round(minutes))}
+          unit={trusted && minutes != null && minutes > 0 && status !== "blind" ? "min" : ""}
+          tone={trusted && minutes != null && minutes < 30 ? "text-red-300" : trusted && minutes != null && minutes < 60 ? "text-amber-200" : ""}
         />
-        <Stat label="Trend" value={status === "blind" ? "–" : perHour(pond.forecast?.slope_per_min)} unit="mg/L/h" />
+        <Stat label="Trend" value={!trusted || status === "blind" ? "–" : perHour(pond.forecast?.slope_per_min)} unit="mg/L/h" />
         <Stat label="Last data" value={seen == null ? "–" : ago(seen)} unit="ago" tone={seen != null && seen > 60 ? "text-slate-400" : ""} />
       </dl>
 
@@ -137,7 +144,7 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
         </div>
         {history ? (
           <Suspense fallback={<ChartPlaceholder text="Loading…" />}>
-            <DoChart history={history} pond={pond} now={now} offsetHours={offsetHours} />
+            <DoChart history={history} pond={pond} now={now} offsetHours={offsetHours} trusted={trusted} />
           </Suspense>
         ) : (
           <ChartPlaceholder text={failed ? "Could not load this pond's history." : "Loading…"} />

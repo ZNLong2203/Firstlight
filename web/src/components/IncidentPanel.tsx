@@ -76,13 +76,23 @@ export function IncidentPanel({ incident, offsetHours, demoCode }: Props) {
 
 function Proof({ incident }: { incident: Incident }) {
   const m = incident.metrics!;
-  const cells: [string, string][] = [
-    ["Detected in", seconds(m.mttd_s)],
-    ["Acted in", seconds(m.time_to_action_s)],
-    ["Lowest DO", m.min_do != null ? `${m.min_do.toFixed(2)} mg/L` : "–"],
-    ["Under 4 mg/L", m.below_safe_min != null ? `${m.below_safe_min} min` : "–"],
-    ["Resolved in", m.mttr_min != null ? `${m.mttr_min} min` : "–"],
-  ];
+  const lowest: [string, string] = ["Lowest DO", m.min_do != null ? `${m.min_do.toFixed(2)} mg/L` : "–"];
+  const cells: [string, string][] =
+    m.blind_s != null
+      ? [
+          ["Detected in", seconds(m.mttd_s)],
+          ["Blind for", seconds(m.blind_s)],
+          ["Readings recovered", m.coverage != null ? `${Math.round(m.coverage * 100)}%` : "–"],
+          lowest,
+          ["Resolved in", m.mttr_min != null ? `${m.mttr_min} min` : "–"],
+        ]
+      : [
+          ["Detected in", seconds(m.mttd_s)],
+          ["Acted in", seconds(m.time_to_action_s)],
+          lowest,
+          ["Under 4 mg/L", m.below_safe_min != null ? `${m.below_safe_min} min` : "–"],
+          ["Resolved in", m.mttr_min != null ? `${m.mttr_min} min` : "–"],
+        ];
   return (
     <dl className="grid grid-cols-3 gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/20 sm:grid-cols-5">
       {cells.map(([label, value]) => (

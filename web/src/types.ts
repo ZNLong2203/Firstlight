@@ -22,6 +22,7 @@ export interface Forecast {
   minutes_to_hypoxia: number | null;
   slope_per_min: number;
   points: number;
+  rate_3m?: number;
 }
 
 export interface PondState {
@@ -98,6 +99,8 @@ export interface IncidentMetrics {
   oxygen_debt?: number;
   below_safe_min?: number;
   lead_time_min?: number | null;
+  blind_s?: number;
+  coverage?: number | null;
 }
 
 export interface Incident {

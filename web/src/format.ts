@@ -95,6 +95,7 @@ const SIGNAL_LABEL: Record<string, string> = {
   hypoxia_risk: "heading for 3 mg/L",
   no_data: "no data",
   probe_degraded: "probe signal weak",
+  fast_drop: "DO falling fast",
   gateway_silent: "the gateway went silent",
   farm_dark: "every aerator on the farm stopped",
   fleet_silent: "most gateways went silent",
