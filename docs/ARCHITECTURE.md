@@ -116,7 +116,7 @@ A pond has at most one open incident; later alerts for the same pond attach to i
 | Datadog unreachable, or a webhook lost | The local failsafe opens the incident and runs `auto` steps. Datadog catches up when it returns. |
 | Gemini unavailable | Detection, diagnosis, actions and proof still run. Only the written summary is missing; a template message goes to the farmer. |
 | Duplicate webhook or retried batch | Unique indexes on `alerts {alert_id, transition}` and `ingest_batches._id` make both idempotent. |
-| API or brain restarts | Change streams resume from the token saved in `stream_state`. Incident jobs are documents, not memory. |
+| API or brain restarts | Incidents and commands are documents, not memory: the brain picks up where it stopped. Consoles reconnect to a fresh snapshot, and gateways receive every command they have not acknowledged. |
 | Gateway offline | Ponds are marked **blind** with the last safe estimate. Gateways store and forward, and the gap is filled with `$densify` and `$fill` once data returns. |
 | Command not acknowledged | Retried after 15 s, then escalated to a person. |
 | Bad deploy | Deployment Tracking places the regression next to its `version`. Rollback is a single compose command. |
