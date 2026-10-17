@@ -19,6 +19,7 @@ export function AiPanel({ incident }: { incident: Incident }) {
   const scores = incident.evals ?? {};
   const badges: [string, boolean | undefined][] = [
     ["agrees with the rules", scores.agrees_with_rules],
+    ["explains what the rules could not", scores.explained_unknown],
     ["only real devices named", scores.grounded === undefined ? undefined : scores.grounded >= 1],
     ["farmer message OK", scores.farmer_message_ok],
     ["right, by the ground truth", scores.rca_correct],

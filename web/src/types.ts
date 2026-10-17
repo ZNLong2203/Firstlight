@@ -127,6 +127,7 @@ export interface Incident {
   postmortem?: { status: string; title?: string; postmortem_md?: string; follow_ups?: string[] };
   evals?: {
     agrees_with_rules?: boolean;
+    explained_unknown?: boolean;
     grounded?: number;
     farmer_message_ok?: boolean;
     truth?: string;

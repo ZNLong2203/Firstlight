@@ -17,7 +17,7 @@ from ddtrace.llmobs.decorators import agent, workflow
 from google.genai import types
 from pymongo.asynchronous.database import AsyncDatabase
 
-from firstlight.ai import tools
+from firstlight.ai import evals, tools
 from firstlight.ai.gemini import Gemini, usage
 
 CAUSES = [
@@ -142,6 +142,7 @@ async def _investigate(
     question = as_json(brief(incident))
     contents = [types.Content(role="user", parts=[types.Part(text=question)])]
     calls_made: list[dict[str, Any]] = []
+    seen: set[str] = set()
     spent: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
     report: dict[str, Any] = {}
     model = ""
@@ -170,6 +171,7 @@ async def _investigate(
                     if span is not None:
                         LLMObs.annotate(span=span, output_data=result)
                 calls_made.append({"tool": call.name, "args": args})
+                seen.update(evals.NAMES.findall(as_json(result)))  # names a tool showed are grounded too
                 parts.append(
                     types.Part.from_function_response(name=call.name or "", response={"result": result})
                 )
@@ -182,6 +184,7 @@ async def _investigate(
         "model": model,
         "rounds": rounds,
         "tool_calls": calls_made,
+        "seen": sorted(seen),
         "latency_ms": round((time.perf_counter() - started) * 1000),
         **spent,
     }

@@ -85,6 +85,16 @@ def test_scores_need_real_names_and_a_plain_vietnamese_message() -> None:
     assert not evals.farmer_message_ok("Incident INC-0001: aerator down", case), "English and internal ids"
     assert not evals.farmer_message_ok("Ao BL-01-A3: " + "quá dài " * 60, case), "too long for a phone screen"
 
+    # A name one of its tools returned is grounded, and an answer where the rules had none is not a
+    # disagreement: it is the AI explaining what the rules could not, for a person to check.
+    unexplained = incident(diagnosis={"cause": "unknown", "confidence": 0.0})
+    from_tools = {**REPORT, "summary": "Probe DO-ST-01-A2 was being cleaned.", "seen": ["DO-ST-01-A2"]}
+    assert evals.scored(from_tools, unexplained) == {
+        "grounded": 1.0,
+        "farmer_message_ok": True,
+        "explained_unknown": True,
+    }
+
 
 async def test_investigator_calls_a_tool_then_answers(api: tuple[httpx.AsyncClient, Any]) -> None:
     _, db = api

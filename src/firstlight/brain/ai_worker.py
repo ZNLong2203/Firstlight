@@ -99,7 +99,7 @@ class AiWorker:
                 "t": result.get("at") or incident["investigation"]["at"],
                 "kind": "ai_investigation",
                 "cause": result.get("cause"),
-                "agrees": scores["agrees_with_rules"],
+                "agrees": scores.get("agrees_with_rules"),
             }
             await self.db.incidents.update_one(
                 {"_id": incident["_id"]},

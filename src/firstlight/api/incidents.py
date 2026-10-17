@@ -32,7 +32,11 @@ async def ai_stats(request: Request) -> dict[str, Any]:
             "$group": {
                 "_id": None,
                 "investigated": {"$sum": 1},
-                "agrees": {"$sum": {"$cond": ["$evals.agrees_with_rules", 1, 0]}},
+                "compared": {
+                    "$sum": {"$cond": [{"$eq": [{"$type": "$evals.agrees_with_rules"}, "bool"]}, 1, 0]}
+                },
+                "agrees": {"$sum": {"$cond": [{"$eq": ["$evals.agrees_with_rules", True]}, 1, 0]}},
+                "explained_unknown": {"$sum": {"$cond": [{"$eq": ["$evals.explained_unknown", True]}, 1, 0]}},
                 "grounded": {"$avg": "$evals.grounded"},
                 "message_ok": {"$sum": {"$cond": ["$evals.farmer_message_ok", 1, 0]}},
                 "scored": {"$sum": {"$cond": [{"$ifNull": ["$evals.truth", False]}, 1, 0]}},
