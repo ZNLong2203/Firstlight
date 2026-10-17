@@ -1,6 +1,6 @@
 # Datadog observability
 
-> **Status:** design baseline. Dashboards, monitors and SLOs are kept as JSON in `infra/datadog/` and applied by script, so they can be rebuilt in any Datadog org.
+> **Status:** the code side is built. Every service runs under ddtrace, emits DogStatsD metrics and JSON logs with trace ids, and the investigator records LLM Observability spans and evaluations. The webhook endpoint is live and checks its secret. Dashboards, monitors and SLOs are applied once the Datadog account is active; they will be kept as JSON in `infra/datadog/` and applied by script, so they can be rebuilt in any Datadog org. Sections that describe them are the design.
 
 ![Observability with Datadog](images/datadog-observability.png)
 
@@ -35,21 +35,25 @@ Business tags are set on the active span (`span.set_tag`) and bound to the logge
 
 ## Custom metrics
 
-About 1,000 contexts: 200 ponds × 4 pond metrics, 50 gateways × 2 gateway metrics, plus a handful of totals. No per-sensor tags.
+About 1,200 contexts: 200 ponds × 6 pond gauges, plus counts and distributions without a pond tag. No per-sensor tags.
 
-| Metric | Type | Tags | Used by |
+| Metric | Type | Tags | Sent by |
 |---|---|---|---|
-| `firstlight.pond.do` | gauge | farm, pond | dashboards, M2 |
-| `firstlight.pond.minutes_to_hypoxia` | gauge | farm, pond | M1, Night Watch |
-| `firstlight.pond.aerators_off` | gauge | farm, pond | M6 |
-| `firstlight.pond.freshness_seconds` | gauge | farm, pond, gateway | M3 |
-| `firstlight.pond.safe_minutes`, `.fresh_minutes`, `.total_minutes` | count | farm, pond | SLOs |
-| `firstlight.gateway.buffer_depth` | gauge | gateway | Data Plane |
-| `firstlight.gateway.send_errors` | count | gateway | Data Plane |
-| `firstlight.ingest.readings`, `.duplicates` | count | version | Data Plane |
-| `firstlight.command.ack_latency_ms` | distribution | action | Data Plane |
-| `firstlight.incident.lead_time_min`, `.mttr_min` | distribution | plane, cause | Night Watch |
-| `firstlight.false_alarm.prevented` | count | cause | Night Watch |
+| `firstlight.pond.do`, `.temp`, `.ph`, `.aerators_off` | gauge | farm, pond, gateway | api, on every batch |
+| `firstlight.pond.minutes_to_hypoxia` | gauge | farm, pond, gateway | brain, every 10 s (600 when no risk is in sight) |
+| `firstlight.pond.freshness_seconds` | gauge | farm, pond, gateway | brain |
+| `firstlight.ingest.readings`, `.duplicates` | count | gateway | api |
+| `firstlight.ingest.lag_seconds` | distribution | gateway | api: how old a batch is when it lands |
+| `firstlight.command.ack_latency_ms` | distribution | action, gateway, status | api |
+| `firstlight.incident.opened`, `.resolved` | count | cause, scope | brain |
+| `firstlight.incident.mttd_s`, `.mttr_min` | distribution | cause, scope | brain |
+| `firstlight.false_alarm.prevented` | count | cause | brain |
+| `firstlight.brain.cycle_s` | distribution | | brain: a cycle over 10 s also logs a warning |
+| `firstlight.ai.investigations` | count | model, status | brain |
+| `firstlight.ai.rca` | count | result, truth | brain, in demo mode |
+| `firstlight.ai.latency_ms` | distribution | model, status | brain |
+
+To add with the Datadog setup: per-pond minute counts for the SLOs (`firstlight.pond.safe_minutes`, `.fresh_minutes`, `.total_minutes`), and the gateways' buffer depth and send errors.
 
 ## Monitors
 
@@ -104,33 +108,41 @@ The webhook sends a shared-secret header. The API checks it, inserts into `alert
 
 ## AI and agent observability
 
-The investigator is a small, bounded agent: Gemini (`gemini-3.8-flash`, falling back to `gemini-3.5-flash`) with read-only tools and at most five tool rounds. It can propose an action but never execute one; the deterministic evidence engine and the playbook decide.
+The investigator is a small, bounded agent: Gemini (`gemini-3.8-flash`, falling back to `gemini-3.5-flash`) with five read-only tools and at most five rounds. It never executes an action; the deterministic evidence engine and the playbook decide. It runs on Vertex AI, after the rules have diagnosed the incident and off the critical path.
 
-**What is traced, and how.** ddtrace 4.16 ships a Google GenAI integration (google-genai 1.21.1 or newer) that records every `generate_content` and `embed_content` call as an LLM Observability `llm` or `embedding` span with token counts, without extra code. The agent loop and its tools are wrapped with the LLM Observability decorators, so one incident produces one connected tree, linked to the brain's APM trace:
+**What is traced, and how.** ddtrace 4.16 ships a Google GenAI integration that records every `generate_content` and `embed_content` call as an LLM Observability `llm` or `embedding` span, with token counts and no extra code. The investigator is an `agent` span and each tool call a `tool` span, so one incident produces one tree, linked to the brain's APM trace:
 
 ```
-workflow   investigate(INC-0042)                 tags: incident_id, pond, cause, plane
-└─ agent   investigator                          gemini-3.8-flash, max 5 tool rounds
-   ├─ tool       get_evidence(INC-0042)          the nine deterministic checks
-   ├─ embedding  gemini-embedding-2              auto-instrumented
-   ├─ retrieval  similar_incidents               hybrid $vectorSearch + $search, documents and scores
-   ├─ tool       query_datadog_logs(gateway)     read-only Datadog API
-   ├─ llm        gemini-3.8-flash                auto-instrumented: prompt, output, tokens, latency
-   └─ task       write_outputs                   RCA, Vietnamese farmer message, postmortem draft
+agent      incident_investigator        tags: incident, rules_cause; metadata: model, rounds
+├─ llm        gemini-3.8-flash          auto-instrumented: prompt, output, tokens, latency
+├─ tool       pond_readings             arguments and result annotated
+├─ tool       recent_deployments        (also gateway_status, farm_overview, past_incidents)
+└─ llm        gemini-3.8-flash          the last round has no tools and must answer in the JSON schema
+workflow   incident_postmortem          once the incident is closed
+└─ llm        gemini-3.8-flash
+embedding  gemini-embedding-2           the closed incident, stored as memory; and the query for similar ones
 ```
 
-**Evaluations**, submitted with `LLMObs.submit_evaluation` and joined to the workflow span:
+Before the agent starts, the three most similar closed incidents are found by hybrid search ([data model](MONGODB-DATA-MODEL.md)) and handed to it with the evidence.
+
+**Evaluations.** No second model grades the first: every check is computed from the record. Each result is stored on the incident and submitted with `LLMObs.submit_evaluation` on the agent's span.
 
 | Evaluation | Type | How it is computed | Why it matters |
 |---|---|---|---|
-| `rca_correct` | score 0/1 | diagnosis compared with the fault the chaos panel injected | accuracy measured against ground truth, not opinion |
-| `agrees_with_rules` | categorical | the agent's cause compared with the deterministic engine's | disagreement is flagged to a person instead of acted on |
-| `grounded` | score 0–1 | share of evidence ids cited by the agent that exist in the bundle | catches invented evidence |
-| `farmer_message_ok` | score 0/1 | Vietnamese, under 300 characters, names the pond and the action taken | the message a farmer reads at 2 a.m. stays short and actionable |
+| `agrees_with_rules` | categorical | the agent's cause compared with the rules', when the rules found one | a disagreement goes to a person instead of being acted on |
+| `explained_unknown` | categorical | the rules found no cause and the agent offers one | an unknown is not scored as a disagreement; a person checks the suggestion |
+| `grounded` | score 0–1 | share of the ponds, farms, gateways and devices the agent names that appear in the incident or in what its tools returned | catches invented evidence |
+| `farmer_message_ok` | categorical | Vietnamese, at most 320 characters, names the pond or farm, no internal jargon | the message a farmer reads at 2 a.m. stays short and plain |
+| `rca_correct` | categorical, demo mode | the agent's cause compared with the fault injected from the chaos panel, or with the release that carried the regression | accuracy against ground truth; the rules are scored the same way, side by side |
+
+On the demo, 9 incidents had been investigated by 17/10/2026:
+- the agent and the rules each matched the injected fault 8 times out of 8;
+- every answer was grounded;
+- all 9 farmer messages passed.
+
+The console's AI panel shows these numbers from `GET /v1/incidents/ai/stats`.
 
 **Dashboard and monitors.** The AI Investigator dashboard shows latency, tokens and cost per investigation, the fallback-model rate and the four evaluations over time. A monitor alerts the operator, never the farmer, when `rca_correct` falls below 0.8 over the last 20 investigations or when the investigator error rate rises.
-
-**Forecast quality.** Toto and the aggregation trend are machine-learning components as well: the brain publishes `firstlight.forecast.abs_error_min` (predicted versus actual minutes to the 3 mg/L line, by model) so forecast drift is visible next to the LLM metrics.
 
 **Checked on the trial account before relying on them:** managed evaluations, LLM Observability Experiments, and the agent graph views. The design above works without any of them.
 
