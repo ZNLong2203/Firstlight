@@ -6,8 +6,8 @@ COMPOSE   = docker compose $(ENV_FILES)
 
 .env:
 	cp .env.example .env
-	sed -i.bak -e "s/^MONGO_ROOT_PASSWORD=$$/MONGO_ROOT_PASSWORD=$$(openssl rand -hex 24)/" -e "s/^GATEWAY_TOKEN=$$/GATEWAY_TOKEN=$$(openssl rand -hex 24)/" .env && rm -f .env.bak
-	@echo "Created .env from .env.example with a random MongoDB password. Fill in the keys you have."
+	sed -i.bak -e "s/^MONGO_ROOT_PASSWORD=$$/MONGO_ROOT_PASSWORD=$$(openssl rand -hex 24)/" -e "s/^GATEWAY_TOKEN=$$/GATEWAY_TOKEN=$$(openssl rand -hex 24)/" -e "s/^DEMO_CODE=$$/DEMO_CODE=$$(openssl rand -hex 5)/" .env && rm -f .env.bak
+	@echo "Created .env from .env.example with a random MongoDB password, gateway token and demo code. Fill in the keys you have."
 
 up: .env            ## start the profiles listed in COMPOSE_PROFILES
 	$(COMPOSE) up -d --build --wait

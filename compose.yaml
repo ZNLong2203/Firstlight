@@ -92,6 +92,7 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       GATEWAY_TOKEN: ${GATEWAY_TOKEN:-}
       DEMO_CODE: ${DEMO_CODE:-}
+      EDGE_CONTROL_URL: http://edge:9000  # the simulator's control port, never published
     labels:
       com.datadoghq.tags.service: firstlight-api
       com.datadoghq.tags.env: ${DD_ENV:-local}
@@ -104,6 +105,9 @@ services:
     environment:
       <<: [*datadog-env, *mongo-env]
       DD_SERVICE: firstlight-brain
+      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:--5}
+      RECOVERY_STABLE_MIN: ${RECOVERY_STABLE_MIN:-2}
+      ESCALATE_AFTER_MIN: ${ESCALATE_AFTER_MIN:-10}
       DD_API_KEY: ${DD_API_KEY:-}
       DD_APP_KEY: ${DD_APP_KEY:-}
       DD_LLMOBS_ENABLED: ${DD_TRACE_ENABLED:-false}
@@ -130,6 +134,7 @@ services:
       <<: *datadog-env
       DD_SERVICE: firstlight-edge
       FIRSTLIGHT_API_URL: http://api:8000
+      EDGE_CONTROL_PORT: 9000
       GATEWAY_TOKEN: ${GATEWAY_TOKEN:-}
       SIM_FARMS: ${SIM_FARMS:-50}
       SIM_PONDS_PER_FARM: ${SIM_PONDS_PER_FARM:-4}
