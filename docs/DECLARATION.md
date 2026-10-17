@@ -23,8 +23,10 @@ Everything that implements the solution was written from 17 October onward, and 
 | Pydantic, pydantic-settings | MIT | models and settings |
 | httpx | BSD-3-Clause | HTTP client (gateways, Datadog API) |
 | ddtrace, datadog | Apache-2.0 / BSD-3-Clause, BSD-3-Clause | APM, LLM Observability, DogStatsD |
-| google-genai | Apache-2.0 | Gemini API client |
+| google-genai | Apache-2.0 | Gemini client (Vertex AI) |
 | React, Vite | MIT | console |
+| Apache ECharts | Apache-2.0 | charts in the console |
+| Tailwind CSS | MIT | console styling |
 | TypeScript | Apache-2.0 | console |
 | @datadog/browser-rum | Apache-2.0 | Real User Monitoring |
 | Caddy | Apache-2.0 | HTTPS reverse proxy |
@@ -46,13 +48,19 @@ The oxygen thresholds come from published sources:
 - Global Seafood Alliance, *Water quality standards: dissolved oxygen*: ≥ 5 mg/L in intensive white-leg shrimp systems, stress below 3 mg/L.
 - Embrapa, *Pesquisa Agropecuária Brasileira* 2009 (oxygen consumption of *L. vannamei* in biofloc): lethal levels reached in under an hour without aeration.
 
+The estimate of what a pond's shrimp are worth uses published figures, cited in full in `src/firstlight/core/economics.py`:
+
+- farm-gate prices by size: dealer quotes collected by tepbac.com on 16/10/2026;
+- stocking, survival, growth, pond size and feed conversion in lined Mekong Delta ponds: FAO Fisheries and Aquaculture Circular 1194 (2019); Hiền et al., *Vietnam Journal of Agricultural Science and Technology* 5(126), 2021; Võ Nam Sơn et al., *CTU Journal of Science* 55(1B), 2019; the Can Tho University biofloc guide;
+- seed and feed prices: tepbac.com, October 2026.
+
 ## AI tools
 
 | Tool | Where | Role |
 |---|---|---|
 | Claude Code (Anthropic, Claude Opus 5.5; research subagents on Claude Sonnet 5.5) | development | research, design, code and documentation, directed and reviewed by the team |
-| Gemini API: `gemini-3.8-flash`, fallback `gemini-3.5-flash` | runtime | the investigator's explanation, the farmer's message and postmortem drafts; never decides an action |
-| Gemini API: `gemini-embedding-2` | runtime | embeddings for incident memory |
-| Toto (Datadog, open weights) | runtime | oxygen forecasting, alongside a trend computed in MongoDB |
+| Gemini on Vertex AI: `gemini-3.8-flash`, fallback `gemini-3.5-flash` | runtime | the investigator's explanation, the farmer's message and postmortem drafts; never decides an action |
+| Gemini on Vertex AI: `gemini-embedding-2` | runtime | embeddings for incident memory |
+| Toto (Datadog, open weights) | evaluation only | compared with the trend computed in MongoDB on the simulator's physics, and left out of the running system (see [Architecture](ARCHITECTURE.md#8-technology-choices)) |
 
 The team understands and can explain every part of the solution.
