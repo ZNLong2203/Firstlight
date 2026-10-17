@@ -1,6 +1,6 @@
 """Wire models shared by the gateways (edge) and the API."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -90,6 +90,8 @@ class PondSpec(BaseModel):
     area_m2: int = Field(gt=0)
     aerators: list[AeratorSpec] = Field(min_length=1)
     probe: ProbeSpec
+    stocked_on: date | None = None
+    density_per_m2: int | None = Field(default=None, gt=0, le=1000)
 
 
 class GatewayManifest(BaseModel):

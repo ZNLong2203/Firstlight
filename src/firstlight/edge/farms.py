@@ -46,6 +46,8 @@ class Farm:
                     area_m2=p.area_m2,
                     aerators=[AeratorSpec(id=a.id, kw=a.kw, standby=a.standby) for a in p.aerators],
                     probe=ProbeSpec(id=p.probe.id, model=p.probe.model),
+                    stocked_on=p.stocked_on,
+                    density_per_m2=p.density_per_m2,
                 )
                 for p in self.ponds
             ],

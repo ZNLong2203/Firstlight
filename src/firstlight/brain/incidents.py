@@ -31,6 +31,7 @@ from firstlight.brain.evidence import (
     recent_release,
 )
 from firstlight.brain.forecast import HYPOXIA_MGL, SAFE_MGL, TURNING_AMPS
+from firstlight.core import economics
 from firstlight.core.metrics import Metrics
 
 log = logging.getLogger("firstlight.brain.incidents")
@@ -145,6 +146,18 @@ async def _next_id(db: Db) -> str:
     return f"INC-{(counter or {}).get('seq', 0):04d}"
 
 
+def _at_risk(ponds: list[str], states: dict[str, Doc], now: datetime) -> Doc | None:
+    """The shrimp in the affected ponds: what the incident puts at stake, as the team estimates it."""
+    crops = [c for p in ponds if (c := economics.pond_crop(states.get(p, {}), now.date()))]
+    if not crops:
+        return None
+    return {
+        "value_vnd": sum(c.value_vnd for c in crops),
+        "biomass_kg": sum(c.biomass_kg for c in crops),
+        "ponds": len(crops),
+    }
+
+
 async def open_incident(
     db: Db, problem: Problem, states: dict[str, Doc], now: datetime, source: str = "brain"
 ) -> Doc | None:
@@ -168,6 +181,7 @@ async def open_incident(
             "minutes_to_hypoxia": (first.get("forecast") or {}).get("minutes_to_hypoxia"),
             "last_seen": last.get("ts"),
         },
+        "at_risk": _at_risk(problem.ponds, states, now),
         "timeline": [{"t": now, "kind": "detected", "source": source, "signals": problem.signals}],
         "evidence": [],
         "actions": [],

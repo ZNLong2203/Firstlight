@@ -92,6 +92,7 @@ async def test_aerator_failure_is_fixed_by_the_standby_and_proven(api: tuple[htt
     fault = harness.world.apply(FaultRequest(id="CH-T1", kind="aerator_trip", pond=pond.id), harness.now)
     mitigating = await harness.until(pond.id, "verifying", limit=6)
     assert mitigating["diagnosis"]["cause"] == "aerator_failure"
+    assert mitigating["at_risk"]["value_vnd"] > 0 and mitigating["at_risk"]["ponds"] == 1
     assert mitigating["diagnosis"]["device"] == fault.device and mitigating["diagnosis"]["confidence"] >= 0.5
     assert pond.aerators[-1].on, "the standby aerator was started through the command bus"
     kinds = [entry["kind"] for entry in mitigating["timeline"]]

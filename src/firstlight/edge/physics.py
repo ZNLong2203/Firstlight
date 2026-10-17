@@ -11,12 +11,13 @@ import math
 import random
 import zlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 SALINITY_FACTOR = 0.92  # brackish water around 15 ppt holds about 8 % less oxygen
 AMPS_PER_KW = 4.4  # single-phase paddlewheel motor at 220 V
 MAX_FOULING = 0.95
+STOCKING_REFERENCE = date(2026, 10, 17)  # each crop's age counts from here, so it grows in real time
 
 
 def do_saturation(temp_c: float) -> float:
@@ -77,6 +78,8 @@ class Pond:
     temp_mean: float
     aerators: list[Aerator]
     probe: Probe
+    stocked_on: date = STOCKING_REFERENCE
+    density_per_m2: int = 150  # post-larvae stocked per square metre
     do: float = 5.5
     temp: float = 29.0
     ph: float = 7.8
@@ -151,4 +154,7 @@ def make_pond(pond_id: str, farm: str, gateway: str) -> Pond:
         temp_mean=rng.uniform(28.6, 29.6),
         aerators=aerators,
         probe=Probe(id=f"DO-{pond_id}"),
+        # Drawn last, so every pond keeps the physics it had before stocking was modelled.
+        stocked_on=STOCKING_REFERENCE - timedelta(days=rng.randint(25, 90)),
+        density_per_m2=rng.randrange(100, 251, 10),
     )

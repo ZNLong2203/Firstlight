@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pymongo.asynchronous.database import AsyncDatabase
 
 from firstlight import __version__
+from firstlight.core import economics
 from firstlight.core.config import get_settings
 
 router = APIRouter(prefix="/v1")
@@ -172,7 +173,8 @@ async def pond(pond_id: str, request: Request) -> dict[str, Any]:
     if state is None:
         raise HTTPException(status_code=404, detail="no such pond")
     devices = await db.devices.find({"pond": pond_id}, {"updated_at": 0}).sort("_id", 1).to_list()
-    return {**state, "devices": devices}
+    crop = economics.pond_crop(state, datetime.now(UTC).date())
+    return {**state, "devices": devices, "crop": crop.doc_dict() if crop else None}
 
 
 @router.get("/ponds/{pond_id}/history")

@@ -1,7 +1,7 @@
 """Gateway endpoints: device manifests and telemetry batches."""
 
 import hmac
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from typing import Any
 
 from ddtrace.trace import tracer
@@ -11,7 +11,7 @@ from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
-from firstlight.core.models import GatewayBatch, GatewayManifest, PondReading
+from firstlight.core.models import GatewayBatch, GatewayManifest, PondReading, PondSpec
 
 router = APIRouter(prefix="/v1")
 
@@ -88,6 +88,7 @@ async def put_manifest(gateway_id: str, manifest: GatewayManifest, request: Requ
                         "farm": manifest.farm,
                         "gateway": manifest.gateway,
                         "area_m2": pond.area_m2,
+                        "stock": _stock(pond),
                         "aerators": [a.id for a in pond.aerators if not a.standby],
                         "standby": [a.id for a in pond.aerators if a.standby],
                         "probe": pond.probe.id,
@@ -101,6 +102,14 @@ async def put_manifest(gateway_id: str, manifest: GatewayManifest, request: Requ
         ordered=False,
     )
     return {"devices": len(devices), "ponds": len(manifest.ponds)}
+
+
+def _stock(pond: PondSpec) -> dict[str, Any] | None:
+    """When the crop was stocked and how densely; dates are stored as midnight UTC."""
+    if pond.stocked_on is None or pond.density_per_m2 is None:
+        return None
+    stocked = datetime.combine(pond.stocked_on, time(0), tzinfo=UTC)
+    return {"stocked_on": stocked, "density_per_m2": pond.density_per_m2}
 
 
 def _reading_doc(r: PondReading, batch: GatewayBatch) -> dict[str, Any]:
