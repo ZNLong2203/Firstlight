@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     demo_code: str = ""
 
     firstlight_api_url: str = "http://localhost:8000"
+    edge_control_url: str = "http://localhost:9000"  # the API reaches the simulator's control port here
+    edge_control_port: int = 9000
     sim_farms: int = 50
     sim_ponds_per_farm: int = 4
     sim_batch_seconds: int = 10

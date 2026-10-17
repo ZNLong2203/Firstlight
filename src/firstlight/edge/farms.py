@@ -24,6 +24,14 @@ class Farm:
     lon: float
     lat: float
     ponds: list[Pond]
+    grid: bool = True  # mains power; the chaos panel can cut it
+    generator_running: bool = False
+
+    def step(self, hour: float, dt_s: float, rng: random.Random) -> None:
+        powered = self.grid or self.generator_running
+        for pond in self.ponds:
+            pond.powered = powered
+            pond.step(hour, dt_s, rng)
 
     def manifest(self) -> GatewayManifest:
         return GatewayManifest(

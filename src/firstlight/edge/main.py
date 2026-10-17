@@ -7,10 +7,13 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import uvicorn
 
 from firstlight.core.config import get_settings
+from firstlight.edge.control import control_app
 from firstlight.edge.farms import Farm, build_farms
 from firstlight.edge.gateway import Gateway
+from firstlight.edge.world import World
 
 log = logging.getLogger("firstlight.edge")
 
@@ -26,8 +29,7 @@ def warm_up(farms: list[Farm], now: datetime, offset_hours: float, rng: random.R
     for minutes_ago in range(360, 0, -1):
         hour = farm_hour(now - timedelta(minutes=minutes_ago), offset_hours)
         for farm in farms:
-            for pond in farm.ponds:
-                pond.step(hour, 60, rng)
+            farm.step(hour, 60, rng)
 
 
 async def announce(client: httpx.AsyncClient, farm: Farm) -> None:
@@ -54,8 +56,18 @@ async def run() -> None:
     rng = random.Random(7)
     farms = build_farms(settings.sim_farms, settings.sim_ponds_per_farm)
     gateways = [Gateway(farm) for farm in farms]
+    world = World(farms, gateways)
     offset = settings.sim_farm_clock_offset_hours
     warm_up(farms, datetime.now(UTC), offset, rng)
+    control = uvicorn.Server(
+        uvicorn.Config(
+            control_app(world, settings.gateway_token),
+            host="0.0.0.0",  # noqa: S104  (inside the compose network only; no published port)
+            port=settings.edge_control_port,
+            log_config=None,
+            access_log=False,
+        )
+    )
     log.info(
         "edge started",
         extra={
@@ -68,24 +80,38 @@ async def run() -> None:
     )
 
     limits = httpx.Limits(max_connections=20, max_keepalive_connections=20)
+    # Every gateway holds its command channel open, so those get a pool of their own.
+    channel_limits = httpx.Limits(
+        max_connections=len(gateways) + 5, max_keepalive_connections=len(gateways) + 5
+    )
     headers = {"X-Gateway-Token": settings.gateway_token}
-    async with httpx.AsyncClient(
-        base_url=settings.firstlight_api_url, timeout=5.0, limits=limits, headers=headers
-    ) as client:
+    async with (
+        httpx.AsyncClient(
+            base_url=settings.firstlight_api_url, timeout=5.0, limits=limits, headers=headers
+        ) as client,
+        httpx.AsyncClient(
+            base_url=settings.firstlight_api_url, timeout=5.0, limits=channel_limits, headers=headers
+        ) as channels,
+    ):
+        background = [asyncio.create_task(control.serve())]
         await asyncio.gather(*(announce(client, farm) for farm in farms))
         log.info("manifests announced", extra={"ctx": {"gateways": len(gateways)}})
+        background += [asyncio.create_task(gateway.listen(channels)) for gateway in gateways]
 
         last = time.monotonic()
-        while True:
-            started = time.monotonic()
-            now = datetime.now(UTC)
-            hour = farm_hour(now, offset)
-            dt = min(started - last, 60.0)
-            last = started
-            for farm in farms:
-                for pond in farm.ponds:
-                    pond.step(hour, dt, rng)
-            for gateway in gateways:
-                gateway.collect(now, rng)
-            await asyncio.gather(*(gateway.flush(client) for gateway in gateways))
-            await asyncio.sleep(max(0.0, settings.sim_batch_seconds - (time.monotonic() - started)))
+        try:
+            while True:
+                started = time.monotonic()
+                now = datetime.now(UTC)
+                hour = farm_hour(now, offset)
+                dt = min(started - last, 60.0)
+                last = started
+                for farm in farms:
+                    farm.step(hour, dt, rng)
+                for gateway in gateways:
+                    gateway.collect(now, rng)
+                await asyncio.gather(*(gateway.flush(client) for gateway in gateways))
+                await asyncio.sleep(max(0.0, settings.sim_batch_seconds - (time.monotonic() - started)))
+        finally:
+            for task in background:
+                task.cancel()

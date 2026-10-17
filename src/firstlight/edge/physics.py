@@ -16,6 +16,7 @@ from typing import Any
 
 SALINITY_FACTOR = 0.92  # brackish water around 15 ppt holds about 8 % less oxygen
 AMPS_PER_KW = 4.4  # single-phase paddlewheel motor at 220 V
+MAX_FOULING = 0.95
 
 
 def do_saturation(temp_c: float) -> float:
@@ -54,6 +55,7 @@ class Probe:
     id: str
     model: str = "optical-DO"
     fouling: float = 0.0  # 0 clean .. 1 fully covered in biofilm
+    fouling_per_min: float = 0.0  # set by the chaos panel; biofilm then builds up minute by minute
     stuck_at: float | None = None
 
     def read(self, true_do: float, rng: random.Random) -> tuple[float, float]:
@@ -85,6 +87,8 @@ class Pond:
         return sum(a.kla for a in self.aerators if a.turning(self.powered))
 
     def step(self, hour: float, dt_s: float, rng: random.Random) -> None:
+        if self.probe.fouling_per_min:
+            self.probe.fouling = min(MAX_FOULING, self.probe.fouling + self.probe.fouling_per_min * dt_s / 60)
         self.temp = water_temp(hour, self.temp_mean) + rng.gauss(0, 0.05)
         sat = do_saturation(self.temp)
         production = self.pmax * daylight(hour)
