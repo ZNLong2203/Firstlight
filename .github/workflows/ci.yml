@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mongo:
         image: mongodb/mongodb-atlas-local:8.0.34
@@ -35,7 +35,7 @@ jobs:
       - run: uv run pytest -q
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web
@@ -52,7 +52,7 @@ jobs:
   images:
     if: github.event_name == 'push'
     needs: [python, web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
