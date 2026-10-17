@@ -1,4 +1,4 @@
-"""firstlight-brain: forecasts every pond every 30 s, keeps pond status current and rolls data up."""
+"""firstlight-brain: forecasts every pond every 10 s, keeps pond status current and rolls data up."""
 
 import asyncio
 import logging
@@ -133,8 +133,13 @@ async def run() -> None:
                     if telegram.enabled:
                         await telegram.send(telegram.chat, reports[0]["message_vi"])
                 await ai.cycle(now)
-                if cycles % 6 == 0:  # a status line every minute is enough
-                    log.info("cycle done", extra={"ctx": {"ponds": counts, "open_incidents": open_incidents}})
+                elapsed = round(loop.time() - started, 2)
+                metrics.distribution("firstlight.brain.cycle_s", elapsed)
+                ctx = {"ponds": counts, "open_incidents": open_incidents, "cycle_s": elapsed}
+                if elapsed > CYCLE_S:  # forecasts are now older than the cycle promises
+                    log.warning("brain cycle overran", extra={"ctx": ctx})
+                elif cycles % 6 == 0:  # a status line every minute is enough
+                    log.info("cycle done", extra={"ctx": ctx})
                 cycles += 1
             except Exception:
                 log.exception("brain cycle failed")
