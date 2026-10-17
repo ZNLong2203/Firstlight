@@ -13,7 +13,7 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-/** Open incidents first, then ponds that need watching on their own, then the proof from tonight. */
+/** Open incidents first, then ponds that need watching on their own, then the proof from the latest incidents. */
 export function Attention({ ponds, incidents, now, offsetHours, selected, onSelect }: Props) {
   const all = [...incidents.values()];
   const open = all
@@ -161,7 +161,7 @@ function Closed({
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Closed tonight · the proof</h3>
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Closed recently · the proof</h3>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2">
         {incidents.map((incident) => {
           return (
@@ -180,7 +180,7 @@ function Closed({
                   </span>
                 </div>
                 <div className="mt-0.5 text-slate-200">
-                  {CAUSE_LABEL[incident.diagnosis?.cause ?? "unknown"]} · {incident.pond ?? incident.gateway ?? incident.farm}
+                  {CAUSE_LABEL[incident.diagnosis?.cause ?? "unknown"]} · {where(incident)}
                 </div>
                 <div className="mt-0.5 text-slate-500">{proofLine(incident)}</div>
               </button>
@@ -190,6 +190,14 @@ function Closed({
       </ul>
     </div>
   );
+}
+
+/** What the incident was about, in one word: the pond, the gateway, the farm or the whole estate. */
+function where(incident: Incident): string {
+  if (incident.scope === "pond") return incident.pond ?? incident.key;
+  if (incident.scope === "gateway") return incident.gateway ?? incident.key;
+  if (incident.scope === "farm") return `farm ${incident.farm ?? incident.key}`;
+  return "the whole estate";
 }
 
 function proofLine(incident: Incident): string {
