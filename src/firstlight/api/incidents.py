@@ -1,6 +1,6 @@
 """Incidents for the console: the list, one incident with its commands, and approving a costly step."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from firstlight.api.chaos import require_demo_code
 from firstlight.api.live import plain, recent_incidents
+from firstlight.brain.reports import build
+from firstlight.core.config import get_settings
 
 router = APIRouter(prefix="/v1/incidents")
 
@@ -81,3 +83,26 @@ async def approve(incident_id: str, body: Approval, request: Request) -> dict[st
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="nothing to approve")
     return {"approved": body.action}
+
+
+reports = APIRouter(prefix="/v1/reports")
+
+
+@reports.get("/latest")
+async def latest_report(request: Request) -> dict[str, Any]:
+    """The newest estate report and the farm reports of the same night."""
+    db = request.app.state.db
+    estate = await db.reports.find_one({"farm": "*"}, sort=[("made_at", -1)])
+    if estate is None:
+        return {"estate": None, "farms": []}
+    farms = await db.reports.find({"date": estate["date"], "farm": {"$ne": "*"}}).sort("farm", 1).to_list()
+    return {"estate": plain(estate), "farms": plain(farms)}
+
+
+@reports.post("/run", dependencies=[Depends(require_demo_code)])
+async def run_report(request: Request) -> dict[str, Any]:
+    """For a daytime demo: the report of the last twelve hours, now, instead of waiting for dawn."""
+    now = datetime.now(UTC)
+    local = now + timedelta(hours=get_settings().sim_farm_clock_offset_hours)
+    made = await build(request.app.state.db, now - timedelta(hours=12), now, local.strftime("%Y-%m-%d %H:%M"))
+    return {"estate": plain(made[0]), "farms": plain(made[1:])}

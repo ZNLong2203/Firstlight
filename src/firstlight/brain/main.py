@@ -16,6 +16,7 @@ from firstlight.brain.forecast import classify, forecast_pipeline
 from firstlight.brain.incidents import Policy, incident_cycle
 from firstlight.brain.notifier import Notifier
 from firstlight.brain.playbooks import ensure_playbooks
+from firstlight.brain.reports import dawn_report_due
 from firstlight.brain.rollup import hour_rollup, minute_rollup
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
@@ -108,7 +109,8 @@ async def run() -> None:
     if gemini.enabled:
         await ensure_search_indexes(db)
     ai = AiWorker(db, gemini, metrics)
-    notifier = Notifier(db, Telegram(settings), settings)
+    telegram = Telegram(settings)
+    notifier = Notifier(db, telegram, settings)
     done: dict[str, datetime] = {}
     loop = asyncio.get_running_loop()
     cycles = 0
@@ -122,6 +124,14 @@ async def run() -> None:
                     open_incidents = await incident_cycle(db, metrics, policy, now)
                     await rollups_due(db, now, done)
                 await notifier.cycle(now)
+                reports = await dawn_report_due(db, now, settings.sim_farm_clock_offset_hours)
+                if reports:
+                    log.info(
+                        "dawn report written",
+                        extra={"ctx": {"date": reports[0]["date"], **reports[0]["summary"]}},
+                    )
+                    if telegram.enabled:
+                        await telegram.send(telegram.chat, reports[0]["message_vi"])
                 await ai.cycle(now)
                 if cycles % 6 == 0:  # a status line every minute is enough
                     log.info("cycle done", extra={"ctx": {"ponds": counts, "open_incidents": open_incidents}})
