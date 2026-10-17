@@ -17,7 +17,15 @@ def main() -> None:
     if args.role == "api":
         import uvicorn
 
-        uvicorn.run("firstlight.api.app:app", host=args.host, port=args.port, log_config=None)
+        # Console streams never end on their own; give them 5 s on shutdown, then close them so a
+        # restart is quick and every console reconnects to the new process.
+        uvicorn.run(
+            "firstlight.api.app:app",
+            host=args.host,
+            port=args.port,
+            log_config=None,
+            timeout_graceful_shutdown=5,
+        )
     elif args.role == "brain":
         from firstlight.brain.main import run
 

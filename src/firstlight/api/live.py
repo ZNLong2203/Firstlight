@@ -20,7 +20,7 @@ log = logging.getLogger("firstlight.api.live")
 POND_FIELDS = ("farm", "gateway", "status", "last", "forecast", "freshness_s", "area_m2")
 PROJECTION = dict.fromkeys(POND_FIELDS, 1)
 RECONNECT = "reconnect"  # queued for a console that fell behind: its stream ends and it starts over
-HEARTBEAT_S = 15
+HEARTBEAT_S = 10
 
 
 def _default(value: Any) -> str:
