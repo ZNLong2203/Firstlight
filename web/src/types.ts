@@ -54,6 +54,9 @@ export interface Crop {
   biomass_kg: number;
   price_vnd_per_kg: number;
   value_vnd: number;
+  /** "market": at today's farm-gate price; "cost": too small to sell, so what seed and feed have cost */
+  basis: "market" | "cost";
+  cost_vnd: number;
 }
 
 export interface ReportSummary {

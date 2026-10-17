@@ -91,9 +91,13 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
             {pond.area_m2 ? ` · ${pond.area_m2.toLocaleString("en")} m²` : ""}
           </p>
           {detail?.crop && (
-            <p className="mt-0.5 text-xs text-amber-200/90" title="Team estimate: density × survival × weight × farm-gate price">
+            <p
+              className="mt-0.5 text-xs text-amber-200/90"
+              title="Team estimate from sourced Mekong Delta figures: stocking × survival × weight × farm-gate price of 16/10/2026, or seed and feed spent while the shrimp are too small to sell"
+            >
               Day {detail.crop.doc} of the crop · {detail.crop.abw_g} g ({detail.crop.count_per_kg}/kg) ·{" "}
-              {(detail.crop.biomass_kg / 1000).toFixed(1)} t · ≈ {vnd(detail.crop.value_vnd)}
+              {(detail.crop.biomass_kg / 1000).toFixed(1)} t · ≈ {vnd(detail.crop.value_vnd)}{" "}
+              {detail.crop.basis === "market" ? "at today's farm-gate price" : "spent on seed and feed so far"}
             </p>
           )}
         </div>
