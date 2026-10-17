@@ -1,4 +1,4 @@
-import { CAUSE_LABEL, clockTime, describe, effectiveStatus, headline, perHour, reasons, seconds, target, urgency } from "../format";
+import { CAUSE_LABEL, clockTime, describe, effectiveStatus, headline, perHour, reasons, seconds, target, urgency, vnd } from "../format";
 import { BADGE, CARD, INCIDENT_BADGE, INCIDENT_CARD, INCIDENT_LABEL, INCIDENT_ORDER, STATUS_LABEL } from "../status";
 import { PROVINCES, type AiStats, type Incident, type PondState } from "../types";
 
@@ -124,6 +124,9 @@ function IncidentCard({
         <span className="font-mono text-xs text-slate-400">{incident._id}</span>
       </div>
       <div className="mt-2 text-sm font-semibold text-white">{target(incident)}</div>
+      {incident.at_risk && (
+        <div className="text-[11px] text-amber-200/90">≈ {vnd(incident.at_risk.value_vnd)} of shrimp at stake</div>
+      )}
       <div className="text-xs text-slate-300">
         {incident.diagnosis ? (
           <>
@@ -220,7 +223,11 @@ function proofLine(incident: Incident): string {
     const recovered = m.coverage != null ? `${Math.round(m.coverage * 100)}% of readings recovered` : "data back";
     return `blind ${seconds(m.blind_s)} · ${recovered} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L`;
   }
-  return `detected ${seconds(m.mttd_s)} · acted ${seconds(m.time_to_action_s)} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L`;
+  const saved =
+    incident.at_risk && (m.min_do ?? 0) >= 3 && ["aerator_failure", "power_outage"].includes(incident.diagnosis?.cause ?? "")
+      ? ` · ≈ ${vnd(incident.at_risk.value_vnd)} protected`
+      : "";
+  return `detected ${seconds(m.mttd_s)} · acted ${seconds(m.time_to_action_s)} · lowest ${m.min_do?.toFixed(1) ?? "–"} mg/L${saved}`;
 }
 
 function AllQuiet({ total }: { total: number }) {

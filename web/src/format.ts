@@ -190,3 +190,9 @@ export function seconds(value: number | null | undefined): string {
   if (value == null) return "–";
   return value < 90 ? `${value} s` : `${(value / 60).toFixed(1)} min`;
 }
+
+/** Vietnamese dong, rounded the way people say it: 1.2 bn, 850 m. */
+export function vnd(value: number | null | undefined): string {
+  if (!value) return "–";
+  return value >= 1e9 ? `${(value / 1e9).toFixed(1)} bn VND` : `${Math.round(value / 1e6)} m VND`;
+}

@@ -17,10 +17,11 @@ interface Props {
   offsetHours: number;
   demoCode: string;
   onDemoCode: (code: string) => void;
+  onReport: () => void;
 }
 
 /** Break the simulated world for real. Needs the demo code; every fault is recorded as ground truth. */
-export function ChaosPanel({ ponds, selected, offsetHours, demoCode, onDemoCode }: Props) {
+export function ChaosPanel({ ponds, selected, offsetHours, demoCode, onDemoCode, onReport }: Props) {
   const [open, setOpen] = useState(false);
   const [faults, setFaults] = useState<Fault[]>([]);
   const [error, setError] = useState("");
@@ -164,6 +165,26 @@ export function ChaosPanel({ ponds, selected, offsetHours, demoCode, onDemoCode 
                   </ChaosButton>
                 </div>
               )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      await demoFetch("/v1/reports/run", demoCode, { method: "POST" });
+                      onReport();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })()
+                }
+                className="mt-2 w-full rounded-md bg-indigo-500/15 px-2.5 py-2 text-left text-xs font-medium text-indigo-100 ring-1 ring-indigo-400/30 transition hover:bg-indigo-500/25 disabled:opacity-50"
+              >
+                Write the dawn report now (last 12 hours)
+              </button>
               <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Active faults</h3>
               {active.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-500">None. The world is as it should be.</p>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Attention } from "./components/Attention";
 import { ChaosPanel } from "./components/ChaosPanel";
+import { DawnReport } from "./components/DawnReport";
 import { countBy, FleetMap } from "./components/FleetMap";
 import { IncidentDrawer } from "./components/IncidentDrawer";
 import { PondDrawer } from "./components/PondDrawer";
@@ -9,7 +10,7 @@ import { TopBar } from "./components/TopBar";
 import { useDemoCode } from "./demo";
 import { effectiveStatus } from "./format";
 import { LEGEND } from "./status";
-import type { AiStats, Incident, Meta } from "./types";
+import type { AiStats, Incident, Meta, Report } from "./types";
 import { useLivePonds, useNow } from "./useLive";
 
 const RECENT_MS = 60 * 60_000; // a pond's drawer keeps showing its last incident for an hour
@@ -58,6 +59,23 @@ function useAiStats(): AiStats | null {
   return stats;
 }
 
+/** The latest dawn report; refreshed every five minutes, and at once after a demo writes one. */
+function useDawnReport(): [{ estate: Report | null; farms: Report[] }, () => void] {
+  const [report, setReport] = useState<{ estate: Report | null; farms: Report[] }>({ estate: null, farms: [] });
+  const load = useCallback(() => {
+    fetch("/v1/reports/latest")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => body && setReport(body as { estate: Report | null; farms: Report[] }))
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 5 * 60_000);
+    return () => clearInterval(timer);
+  }, [load]);
+  return [report, load];
+}
+
 function useMeta(): Meta | null {
   const [meta, setMeta] = useState<Meta | null>(null);
   useEffect(() => {
@@ -74,6 +92,7 @@ export function App() {
   const now = useNow();
   const meta = useMeta();
   const aiStats = useAiStats();
+  const [dawn, reloadDawn] = useDawnReport();
   const [demoCode, setDemoCode] = useDemoCode();
   const [selected, select] = useSelectedPond();
   const list = useMemo(() => [...ponds.values()], [ponds]);
@@ -108,6 +127,7 @@ export function App() {
           <p className="py-20 text-center text-sm text-slate-500">Waiting for the first gateway to report.</p>
         ) : (
           <>
+            {dawn.estate && <DawnReport estate={dawn.estate} farms={dawn.farms} />}
             <section aria-labelledby="attention-title">
               <h2 id="attention-title" className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                 Needs attention
@@ -153,7 +173,14 @@ export function App() {
           onClose={close}
         />
       )}
-      <ChaosPanel ponds={list} selected={selected} offsetHours={offset ?? 0} demoCode={demoCode} onDemoCode={setDemoCode} />
+      <ChaosPanel
+        ponds={list}
+        selected={selected}
+        offsetHours={offset ?? 0}
+        demoCode={demoCode}
+        onDemoCode={setDemoCode}
+        onReport={reloadDawn}
+      />
     </div>
   );
 }

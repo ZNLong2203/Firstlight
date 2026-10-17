@@ -46,7 +46,38 @@ export interface Device {
   probe?: { model: string };
 }
 
+export interface Crop {
+  doc: number;
+  abw_g: number;
+  survival: number;
+  count_per_kg: number;
+  biomass_kg: number;
+  price_vnd_per_kg: number;
+  value_vnd: number;
+}
+
+export interface ReportSummary {
+  incidents: number;
+  by_cause: Record<string, number>;
+  recovered: number;
+  false_alarms_stopped: number;
+  escalated: number;
+  protected_vnd: number;
+  oxygen_safety: number | null;
+  lowest: { pond: string; do: number } | null;
+}
+
+export interface Report {
+  _id: string;
+  farm: string;
+  date: string;
+  summary: ReportSummary;
+  message_vi?: string;
+  ponds?: { pond: string; min_do: number; below_safe_min: number }[];
+}
+
 export interface PondDetail extends PondState {
+  crop?: Crop | null;
   devices: Device[];
   aerators?: string[];
   standby?: string[];
@@ -125,6 +156,7 @@ export interface Incident {
   metrics?: IncidentMetrics;
   false_alarm_prevented?: boolean;
   investigation?: Investigation;
+  at_risk?: { value_vnd: number; biomass_kg: number; ponds: number } | null;
   similar?: {
     _id: string;
     key: string;

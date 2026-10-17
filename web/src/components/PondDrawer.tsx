@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import { ago, clockName, effectiveStatus, perHour, reasons } from "../format";
+import { ago, clockName, effectiveStatus, perHour, reasons, vnd } from "../format";
 import { BADGE, STATUS_LABEL } from "../status";
 import { PROVINCES, type HistoryPoint, type Incident, type PondDetail, type PondState } from "../types";
 import { IncidentPanel } from "./IncidentPanel";
@@ -90,6 +90,12 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
             {PROVINCES[pond.farm.split("-")[0]]} · farm {pond.farm} · {pond.gateway}
             {pond.area_m2 ? ` · ${pond.area_m2.toLocaleString("en")} m²` : ""}
           </p>
+          {detail?.crop && (
+            <p className="mt-0.5 text-xs text-amber-200/90" title="Team estimate: density × survival × weight × farm-gate price">
+              Day {detail.crop.doc} of the crop · {detail.crop.abw_g} g ({detail.crop.count_per_kg}/kg) ·{" "}
+              {(detail.crop.biomass_kg / 1000).toFixed(1)} t · ≈ {vnd(detail.crop.value_vnd)}
+            </p>
+          )}
         </div>
         <button
           type="button"
