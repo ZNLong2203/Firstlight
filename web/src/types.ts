@@ -1,5 +1,11 @@
 export type Status = "ok" | "watch" | "alert" | "sensor" | "blind";
 
+export interface AeratorNow {
+  id: string;
+  on: boolean;
+  amp: number;
+}
+
 export interface PondLast {
   ts: string;
   do: number;
@@ -7,6 +13,7 @@ export interface PondLast {
   ph: number;
   aerators_on: number;
   aerators_running: number;
+  aer?: AeratorNow[];
   probe_q: number;
 }
 
@@ -27,6 +34,8 @@ export interface PondState {
   freshness_s?: number | null;
   area_m2?: number;
   open_incident?: string;
+  repair_tickets?: { device: string; incident: string }[];
+  sensor_ticket?: { incident: string; probe?: string };
 }
 
 export interface Device {

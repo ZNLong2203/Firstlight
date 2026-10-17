@@ -162,19 +162,31 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
           )}
         </h3>
         <ul className="mt-2 space-y-1.5">
-          {aerators.map((device) => (
-            <li key={device._id} className="flex items-center justify-between rounded-lg bg-night-800 px-3 py-2 text-sm">
-              <span className="font-mono text-xs text-slate-200">{device._id}</span>
-              <span className="flex items-center gap-2 text-xs text-slate-400">
-                {device.aerator?.kw} kW
-                {device.aerator?.standby && (
-                  <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-300">
-                    standby
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
+          {aerators.map((device) => {
+            const reading = last?.aer?.find((a) => a.id === device._id);
+            const repair = pond.repair_tickets?.some((t) => t.device === device._id);
+            const state = !reading
+              ? null
+              : reading.amp >= 0.5
+                ? { text: `${reading.amp.toFixed(1)} A`, tone: "text-emerald-300" }
+                : reading.on
+                  ? { text: repair ? "0 A · awaiting repair" : "0 A · stopped", tone: "text-red-300" }
+                  : { text: "off", tone: "text-slate-500" };
+            return (
+              <li key={device._id} className="flex items-center justify-between rounded-lg bg-night-800 px-3 py-2 text-sm">
+                <span className="font-mono text-xs text-slate-200">{device._id}</span>
+                <span className="flex items-center gap-2 text-xs text-slate-400">
+                  {device.aerator?.kw} kW
+                  {device.aerator?.standby && (
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-300">
+                      standby
+                    </span>
+                  )}
+                  {state && <span className={`min-w-[4.5rem] text-right font-mono ${state.tone}`}>{state.text}</span>}
+                </span>
+              </li>
+            );
+          })}
           {!detail && !failed && <li className="text-xs text-slate-500">Loading devices…</li>}
         </ul>
         {probe && (

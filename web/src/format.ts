@@ -31,7 +31,9 @@ export function reasons(pond: PondState, status: Status, now: number): string[] 
   if (last.do <= HYPOXIA_MGL) out.push("Below 3 mg/L now");
   else if (minutes != null) out.push(`3 mg/L in ${Math.round(minutes)} min`);
   else if (last.do < SAFE_MGL) out.push("Below 4 mg/L");
-  if (last.aerators_running < last.aerators_on) {
+  const repairs = pond.repair_tickets ?? [];
+  if (repairs.length) out.push(`Running on its standby; ${repairs.map((t) => t.device).join(", ")} awaits repair`);
+  else if (last.aerators_running < last.aerators_on) {
     out.push(`${last.aerators_running} of ${last.aerators_on} aerators turning`);
   }
   return out;

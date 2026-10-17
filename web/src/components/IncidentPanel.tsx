@@ -50,6 +50,7 @@ export function IncidentPanel({ incident, offsetHours, demoCode }: Props) {
                 <span className="text-slate-300">
                   <span className="text-slate-500">{CAUSE_LABEL[item.cause] ?? item.cause}: </span>
                   {item.detail}
+                  {item.at && <span className="text-slate-500"> · from {clockTime(item.at, offsetHours, true)}</span>}
                 </span>
               </li>
             ))}

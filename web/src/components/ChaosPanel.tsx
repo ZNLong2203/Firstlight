@@ -93,7 +93,7 @@ export function ChaosPanel({ ponds, selected, offsetHours, demoCode, onDemoCode 
   const active = faults.filter((f) => f.status === "active");
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+    <div className="fixed bottom-4 left-4 z-40 flex flex-col items-start gap-2">
       {open && (
         <div className="w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-night-700 bg-night-900/95 p-4 shadow-2xl shadow-black/60 backdrop-blur">
           <div className="flex items-center justify-between">
