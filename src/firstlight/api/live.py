@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pymongo.asynchronous.database import AsyncDatabase
@@ -17,8 +18,9 @@ from firstlight.core.config import get_settings
 router = APIRouter(prefix="/v1")
 log = logging.getLogger("firstlight.api.live")
 
-POND_FIELDS = ("farm", "gateway", "status", "last", "forecast", "freshness_s", "area_m2")
+POND_FIELDS = ("farm", "gateway", "status", "last", "forecast", "freshness_s", "area_m2", "open_incident")
 PROJECTION = dict.fromkeys(POND_FIELDS, 1)
+RECENT_INCIDENTS = 20
 RECONNECT = "reconnect"  # queued for a console that fell behind: its stream ends and it starts over
 HEARTBEAT_S = 10
 
@@ -26,7 +28,20 @@ HEARTBEAT_S = 10
 def _default(value: Any) -> str:
     if isinstance(value, datetime):
         return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+    if isinstance(value, ObjectId):
+        return str(value)
     raise TypeError(f"not serialisable: {type(value).__name__}")
+
+
+def plain(value: Any) -> Any:
+    """ObjectIds as strings, recursively, so FastAPI can encode documents that reference commands."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [plain(v) for v in value]
+    return value
 
 
 def sse(event: str, data: Any) -> str:
@@ -38,11 +53,11 @@ def project(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 class Hub:
-    """Fans pond updates out to every connected console, coalesced to one message per second."""
+    """Fans updates out to every connected console, coalesced to one message per kind per second."""
 
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[str]] = set()
-        self._pending: dict[str, dict[str, Any]] = {}
+        self._pending: dict[str, dict[str, dict[str, Any]]] = {}
 
     @property
     def subscribers(self) -> int:
@@ -56,14 +71,16 @@ class Hub:
     def unsubscribe(self, queue: asyncio.Queue[str]) -> None:
         self._subscribers.discard(queue)
 
-    def offer(self, pond: dict[str, Any]) -> None:
-        self._pending[pond["_id"]] = pond  # only the latest state of each pond matters
+    def offer(self, doc: dict[str, Any], kind: str = "ponds") -> None:
+        self._pending.setdefault(kind, {})[doc["_id"]] = doc  # only the latest state of each one matters
 
     def flush(self) -> None:
-        if not self._pending:
-            return
-        message = sse("ponds", list(self._pending.values()))
+        messages = [sse(kind, list(docs.values())) for kind, docs in self._pending.items() if docs]
         self._pending.clear()
+        for message in messages:
+            self._send(message)
+
+    def _send(self, message: str) -> None:
         for queue in list(self._subscribers):
             try:
                 queue.put_nowait(message)
@@ -76,24 +93,37 @@ class Hub:
                 queue.put_nowait(RECONNECT)
 
 
-async def watch_pond_state(db: AsyncDatabase[dict[str, Any]], hub: Hub) -> None:
-    """pond_state change stream → hub. Restarts from the last resume token after any error."""
+async def watch(db: AsyncDatabase[dict[str, Any]], collection: str, hub: Hub, kind: str) -> None:
+    """A collection's change stream → hub. Restarts from the last resume token after any error."""
     token: Any = None
     pipeline = [{"$match": {"operationType": {"$in": ["insert", "update", "replace"]}}}]
+    shape = project if kind == "ponds" else plain
     while True:
         try:
-            async with await db.pond_state.watch(
+            async with await db[collection].watch(
                 pipeline, full_document="updateLookup", resume_after=token
             ) as stream:
                 async for change in stream:
                     token = stream.resume_token
                     if doc := change.get("fullDocument"):
-                        hub.offer(project(doc))
+                        hub.offer(shape(doc), kind)
         except asyncio.CancelledError:
             raise
         except Exception:
-            log.exception("pond_state change stream failed; restarting")
+            log.exception("change stream failed; restarting", extra={"ctx": {"collection": collection}})
             await asyncio.sleep(2)
+
+
+async def recent_incidents(db: AsyncDatabase[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every open incident, then the most recently closed ones."""
+    opened = await db.incidents.find({"open": True}).sort("opened_at", -1).to_list()
+    closed = (
+        await db.incidents.find({"open": {"$exists": False}})
+        .sort("closed_at", -1)
+        .limit(RECENT_INCIDENTS)
+        .to_list()
+    )
+    return [plain(doc) for doc in opened + closed]
 
 
 async def flush_every_second(hub: Hub) -> None:
@@ -160,6 +190,7 @@ async def stream(request: Request) -> StreamingResponse:
         try:
             snapshot = [project(p) async for p in db.pond_state.find({}, PROJECTION).sort("_id", 1)]
             yield "retry: 2000\n" + sse("snapshot", snapshot)
+            yield sse("incidents", await recent_incidents(db))
             while not await request.is_disconnected():
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_S)

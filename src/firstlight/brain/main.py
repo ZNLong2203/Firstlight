@@ -10,6 +10,8 @@ from pymongo import UpdateOne
 from pymongo.asynchronous.database import AsyncDatabase
 
 from firstlight.brain.forecast import classify, forecast_pipeline
+from firstlight.brain.incidents import Policy, incident_cycle
+from firstlight.brain.playbooks import ensure_playbooks
 from firstlight.brain.rollup import hour_rollup, minute_rollup
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
@@ -17,7 +19,7 @@ from firstlight.core.mongo import database, make_client
 
 log = logging.getLogger("firstlight.brain")
 
-FORECAST_EVERY_S = 30
+CYCLE_S = 10  # the gateways report every 10 s, so there is nothing new to look at any sooner
 FORECAST_WINDOW = timedelta(minutes=12)
 NO_RISK_MINUTES = 600  # published instead of "never", so monitors always have a number
 
@@ -27,7 +29,9 @@ async def forecast_once(db: AsyncDatabase[dict[str, Any]], metrics: Metrics, now
         forecasts = {
             f["_id"]: f async for f in await db.readings.aggregate(forecast_pipeline(now - FORECAST_WINDOW))
         }
-    states = [s async for s in db.pond_state.find({}, {"last": 1, "farm": 1, "gateway": 1})]
+    states = [
+        s async for s in db.pond_state.find({}, {"last": 1, "farm": 1, "gateway": 1, "sensor_ticket": 1})
+    ]
     updates = []
     counts: dict[str, int] = {}
     for state in states:
@@ -35,7 +39,7 @@ async def forecast_once(db: AsyncDatabase[dict[str, Any]], metrics: Metrics, now
         freshness = (now - last["ts"]).total_seconds() if last else float("inf")
         f = forecasts.get(state["_id"], {})
         minutes = f.get("minutes_to_hypoxia")
-        status = classify(last, minutes, freshness)
+        status = classify(last, minutes, freshness, sensor_suspect="sensor_ticket" in state)
         counts[status] = counts.get(status, 0) + 1
         updates.append(
             UpdateOne(
@@ -87,21 +91,30 @@ async def run() -> None:
     client = make_client(settings)
     db = database(client, settings)
     metrics = Metrics(settings)
-    log.info("brain started", extra={"ctx": {"env": settings.dd_env, "every_s": FORECAST_EVERY_S}})
+    policy = Policy(
+        recovery_min=settings.recovery_stable_min,
+        escalate_after_min=settings.escalate_after_min,
+        farm_offset_hours=settings.sim_farm_clock_offset_hours,
+    )
+    log.info("brain started", extra={"ctx": {"env": settings.dd_env, "every_s": CYCLE_S}})
+    await ensure_playbooks(db)
     done: dict[str, datetime] = {}
-    next_forecast = 0.0
     loop = asyncio.get_running_loop()
+    cycles = 0
     try:
         while True:
+            started = loop.time()
             now = datetime.now(UTC)
             try:
-                if loop.time() >= next_forecast:
-                    next_forecast = loop.time() + FORECAST_EVERY_S
+                with tracer.trace("brain.cycle", service="firstlight-brain", resource="cycle"):
                     counts = await forecast_once(db, metrics, now)
-                    log.info("forecast done", extra={"ctx": {"ponds": counts}})
-                await rollups_due(db, now, done)
+                    open_incidents = await incident_cycle(db, metrics, policy, now)
+                    await rollups_due(db, now, done)
+                if cycles % 6 == 0:  # a status line every minute is enough
+                    log.info("cycle done", extra={"ctx": {"ponds": counts, "open_incidents": open_incidents}})
+                cycles += 1
             except Exception:
                 log.exception("brain cycle failed")
-            await asyncio.sleep(5)
+            await asyncio.sleep(max(0.0, CYCLE_S - (loop.time() - started)))
     finally:
         await client.close()

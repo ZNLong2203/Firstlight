@@ -4,6 +4,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+os.environ.setdefault("DD_TRACE_ENABLED", "false")  # no agent in tests; set before ddtrace is imported
+
 import httpx
 import pytest
 import uvicorn

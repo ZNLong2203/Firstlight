@@ -108,3 +108,19 @@ async def test_forecast_once_writes_status_and_forecast(api: tuple[httpx.AsyncCl
     assert a3["status"] == "alert" and 0 < a3["forecast"]["minutes_to_hypoxia"] < 30
     assert a4["status"] == "blind" and a4["freshness_s"] == pytest.approx(300, abs=1)
     assert counts == {"alert": 1, "blind": 1}
+
+
+async def test_forecast_restarts_when_an_aerator_stops(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """Ten flat minutes with three aerators, then one stops and DO falls: the slope must be the new one."""
+    _, db = api
+    docs = []
+    for i in range(72):
+        ts = NOW - timedelta(seconds=10 * (71 - i))
+        after = i >= 60  # the last two minutes
+        aer = [{"id": f"a{k}", "on": True, "amp": 0.0 if after and k == 0 else 6.0} for k in range(3)]
+        do = 5.0 - (0.05 * (i - 60) / 6 if after else 0.0)
+        docs.append({"ts": ts, "meta": {"farm": "BL-01", "pond": "p", "gateway": "g"}, "do": do, "aer": aer})
+    await db.readings.insert_many(docs)
+    result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
+    assert result[0]["slope_per_min"] == pytest.approx(-0.05, rel=0.05)
+    assert result[0]["points"] == 12 and 30 < result[0]["minutes_to_hypoxia"] < 45

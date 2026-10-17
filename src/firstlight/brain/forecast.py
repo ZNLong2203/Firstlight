@@ -5,19 +5,45 @@ from typing import Any
 
 HYPOXIA_MGL = 3.0  # shrimp are stressed below this (Global Seafood Alliance)
 SAFE_MGL = 4.0
-MIN_POINTS = 6  # a minute of readings before a slope means anything
+MIN_POINTS = 9  # 90 s of readings in the current regime before a slope means anything
 FALLING = -0.005  # mg/L per minute; anything flatter is noise
+TURNING_AMPS = 0.5
 
 
 def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
-    """Least-squares slope of DO per pond: slope = cov(t, DO) / var(t), computed with window functions."""
+    """Least-squares slope of DO per pond: slope = cov(t, DO) / var(t), computed with window functions.
+
+    The fit only uses readings since the number of turning aerators last changed. When an aerator
+    stops, or a standby one starts, the old trend no longer describes the pond, so the regression
+    starts again instead of averaging the two regimes for the next twelve minutes.
+    """
     cumulative = {"documents": ["unbounded", "current"]}
+    by_pond = {"partitionBy": "$meta.pond", "sortBy": {"ts": 1}}
+    turning = {
+        "$size": {
+            "$filter": {"input": {"$ifNull": ["$aer", []]}, "cond": {"$gte": ["$$this.amp", TURNING_AMPS]}}
+        }
+    }
+    changed = {
+        "$cond": [
+            {"$and": [{"$ne": ["$previous", None]}, {"$ne": ["$previous", "$turning"]}]},
+            1,
+            0,
+        ]
+    }
     return [
         {"$match": {"ts": {"$gte": since}}},
-        {"$set": {"t": {"$toLong": "$ts"}}},
+        {"$set": {"t": {"$toLong": "$ts"}, "turning": turning}},
         {
             "$setWindowFields": {
-                "partitionBy": "$meta.pond",
+                **by_pond,
+                "output": {"previous": {"$shift": {"output": "$turning", "by": -1}}},
+            }
+        },
+        {"$setWindowFields": {**by_pond, "output": {"regime": {"$sum": changed, "window": cumulative}}}},
+        {
+            "$setWindowFields": {
+                "partitionBy": {"pond": "$meta.pond", "regime": "$regime"},
                 "sortBy": {"ts": 1},
                 "output": {
                     "cov": {"$covariancePop": ["$t", "$do"], "window": cumulative},
@@ -82,10 +108,15 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
     ]
 
 
-def classify(last: dict[str, Any] | None, minutes: float | None, freshness_s: float) -> str:
-    """ok, watch, alert or blind. The evidence engine later refines alert into pond, sensor or data path."""
+def classify(
+    last: dict[str, Any] | None, minutes: float | None, freshness_s: float, sensor_suspect: bool = False
+) -> str:
+    """ok, watch, alert, sensor or blind. `sensor` means the probe is known to be wrong: its oxygen
+    reading is not trusted, a cleaning ticket is open, and nobody is woken up for it."""
     if last is None or freshness_s > 60:
         return "blind"
+    if sensor_suspect:
+        return "sensor"
     if last["do"] < HYPOXIA_MGL or (minutes is not None and minutes < 30):
         return "alert"
     falling_soon = minutes is not None and minutes < 60

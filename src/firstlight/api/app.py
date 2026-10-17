@@ -13,8 +13,9 @@ from firstlight import __version__
 from firstlight.api.chaos import router as chaos_router
 from firstlight.api.commands import CommandHub, watch_commands
 from firstlight.api.commands import router as commands_router
+from firstlight.api.incidents import router as incidents_router
 from firstlight.api.ingest import router as ingest_router
-from firstlight.api.live import Hub, flush_every_second, watch_pond_state
+from firstlight.api.live import Hub, flush_every_second, watch
 from firstlight.api.live import router as live_router
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
@@ -38,7 +39,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         base_url=settings.edge_control_url, timeout=5.0, headers={"X-Gateway-Token": settings.gateway_token}
     )
     tasks = [
-        asyncio.create_task(watch_pond_state(app.state.db, app.state.hub)),
+        asyncio.create_task(watch(app.state.db, "pond_state", app.state.hub, "ponds")),
+        asyncio.create_task(watch(app.state.db, "incidents", app.state.hub, "incidents")),
         asyncio.create_task(flush_every_second(app.state.hub)),
         asyncio.create_task(watch_commands(app.state.db, app.state.commands)),
     ]
@@ -59,6 +61,7 @@ app.include_router(ingest_router)
 app.include_router(live_router)
 app.include_router(commands_router)
 app.include_router(chaos_router)
+app.include_router(incidents_router)
 
 
 @app.get("/healthz")

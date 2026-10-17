@@ -173,7 +173,7 @@ async def acknowledge(command_id: str, ack: CommandAck, request: Request) -> dic
             {
                 "$push": {
                     "timeline": {
-                        "t": now,
+                        "t": ack.executed_at,  # when the device acted, by the gateway's clock
                         "kind": "action_done" if ack.status == "done" else "action_failed",
                         "action": command["action"],
                         "device": command.get("device"),

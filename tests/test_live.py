@@ -60,3 +60,13 @@ async def test_ponds_and_history(api: tuple[httpx.AsyncClient, Any]) -> None:
     assert len(rows) == 12 and rows[0]["ts"] < rows[-1]["ts"] and rows[0]["running"] == 1
     assert (await client.get("/v1/ponds/nope")).status_code == 404
     assert (await client.get("/v1/meta")).json()["farm_clock_offset_hours"] == -5.0
+
+
+def test_hub_sends_each_kind_as_its_own_event() -> None:
+    hub = Hub()
+    queue = hub.subscribe()
+    hub.offer({"_id": "A1", "status": "ok"})
+    hub.offer({"_id": "INC-0001", "status": "mitigating"}, "incidents")
+    hub.flush()
+    events = sorted(queue.get_nowait().split("\n")[0] for _ in range(2))
+    assert events == ["event: incidents", "event: ponds"]
