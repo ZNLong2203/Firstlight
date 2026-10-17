@@ -104,9 +104,20 @@ async def test_aerator_failure_is_fixed_by_the_standby_and_proven(api: tuple[htt
     resolved = await harness.until(pond.id, "resolved", limit=30)
     metrics = resolved["metrics"]
     assert metrics["mttd_s"] <= 20 and metrics["time_to_action_s"] <= 20
+    assert metrics["mttr_min"] >= 2, "recovery is only counted after the standby started"
     assert metrics["min_do"] >= 4.0 and metrics["oxygen_debt"] == 0
     state = await harness.db.pond_state.find_one({"_id": pond.id})
-    assert "open_incident" not in state and await harness.db.incidents.count_documents({}) == 1
+    assert "open_incident" not in state and [t["device"] for t in state["repair_tickets"]] == [fault.device]
+
+    await harness.tick(6)
+    assert await harness.db.incidents.count_documents({}) == 1, (
+        "a broken aerator with a ticket is not a new alarm"
+    )
+    harness.world.clear("CH-T1")  # the technician repairs it
+    await harness.tick(2)
+    state = await harness.db.pond_state.find_one({"_id": pond.id})
+    closed = await harness.db.incidents.find_one({"_id": resolved["_id"]})
+    assert state["repair_tickets"] == [] and closed["actions"][-1]["status"] == "done"
 
 
 async def test_fouled_probe_is_a_ticket_not_a_wake_up_call(api: tuple[httpx.AsyncClient, Any]) -> None:

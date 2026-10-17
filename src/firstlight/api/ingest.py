@@ -125,6 +125,7 @@ def _pond_state_update(r: PondReading, gateway: str) -> list[dict[str, Any]]:
         "ph": r.ph,
         "aerators_on": sum(1 for a in r.aer if a.on),
         "aerators_running": sum(1 for a in r.aer if a.amp >= 0.5),
+        "aer": [{"id": a.id, "on": a.on, "amp": a.amp} for a in r.aer],
         "probe_q": r.probe.q,
     }
     newer = {"$or": [{"$eq": [{"$type": "$last.ts"}, "missing"]}, {"$lt": ["$last.ts", r.ts]}]}

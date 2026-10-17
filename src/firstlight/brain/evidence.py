@@ -69,10 +69,6 @@ async def pond_readings(db: AsyncDatabase[dict[str, Any]], pond: str, now: datet
     return [r async for r in await db.readings.aggregate(pond_window(pond, now - WINDOW))]
 
 
-def hhmmss(ts: datetime) -> str:
-    return ts.strftime("%H:%M:%S")
-
-
 def stopped_aerators(rows: list[dict[str, Any]]) -> list[tuple[str, datetime, float]]:
     """Aerators switched on but drawing no current now: (id, when it stopped, current before)."""
     if not rows:
@@ -92,13 +88,19 @@ def stopped_aerators(rows: list[dict[str, Any]]) -> list[tuple[str, datetime, fl
     return out
 
 
-def pond_checks(rows: list[dict[str, Any]], farm_ponds: list[dict[str, Any]]) -> list[Evidence]:
-    """Physical and sensor checks for one pond. `farm_ponds` are the pond_state documents of its farm."""
+def pond_checks(
+    rows: list[dict[str, Any]],
+    farm_ponds: list[dict[str, Any]],
+    now: datetime | None = None,
+    ticketed: frozenset[str] = frozenset(),
+) -> list[Evidence]:
+    """Checks on all three planes for one pond. `farm_ponds` are the pond_state documents of its farm;
+    `ticketed` aerators are already known to be broken and waiting for repair."""
     if not rows:
         return []
     latest = rows[-1]
     evidence: list[Evidence] = []
-    stopped = stopped_aerators(rows)
+    stopped = [s for s in stopped_aerators(rows) if s[0] not in ticketed]
     farm_dark = bool(farm_ponds) and all(
         (p.get("last") or {}).get("aerators_on", 0) > 0
         and (p.get("last") or {}).get("aerators_running", 1) == 0
@@ -107,25 +109,29 @@ def pond_checks(rows: list[dict[str, Any]], farm_ponds: list[dict[str, Any]]) ->
     do_rate = latest.get("do_rate") or 0.0
     ph_rate = latest.get("ph_rate") or 0.0
 
-    if stopped:
-        # One piece of evidence however many stopped: in a power cut they all do, and that is one fact.
-        first_stop = min(at for _, at, _ in stopped)
-        detail = "; ".join(
-            f"{device} drew {before:.1f} A, then 0 A from {hhmmss(at)}" for device, at, before in stopped
-        )
-        evidence.append(
-            Evidence("aerator_current_drop", "aerator_failure", "support", 0.6, detail, first_stop)
-        )
+    # Pond plane.
     if farm_dark:
         evidence.append(
             Evidence(
-                "farm_power", "power_outage", "support", 0.8, "every aerator on the farm stopped at once"
+                "farm_power",
+                "power_outage",
+                "support",
+                0.9,
+                "every aerator on the farm stopped at once",
+                min((at for _, at, _ in stopped), default=None),
             )
         )
         evidence.append(
             Evidence(
-                "farm_power", "aerator_failure", "against", 0.4, "one broken aerator would not stop the farm"
+                "farm_power", "aerator_failure", "against", 0.3, "one broken aerator would not stop the farm"
             )
+        )
+    elif stopped:
+        # Switched on but drawing nothing: direct physical evidence, whatever the cause inside the motor.
+        first_stop = min(at for _, at, _ in stopped)
+        detail = "; ".join(f"{device} drew {before:.1f} A, then 0 A" for device, _, before in stopped)
+        evidence.append(
+            Evidence("aerator_current_drop", "aerator_failure", "support", 0.85, detail, first_stop)
         )
     if stopped and do_rate < FALLING:
         cause = "power_outage" if farm_dark else "aerator_failure"
@@ -148,7 +154,18 @@ def pond_checks(rows: list[dict[str, Any]], farm_ponds: list[dict[str, Any]]) ->
             detail = f"pH fell with DO ({ph_change:+.2f} in 3 min)"
             evidence.append(Evidence("ph_agrees", "sensor_fault", "against", 0.2, detail))
 
+    # Sensor plane.
     quality = (latest.get("probe") or {}).get("q", 1.0)
+    if quality >= 0.95:
+        evidence.append(
+            Evidence(
+                "probe_quality",
+                "sensor_fault",
+                "against",
+                0.2,
+                f"the probe reports signal quality {quality:.2f}",
+            )
+        )
     if quality < 0.8:
         evidence.append(
             Evidence(
@@ -168,6 +185,14 @@ def pond_checks(rows: list[dict[str, Any]], farm_ponds: list[dict[str, Any]]) ->
                 0.35,
                 f"DO reads {do_rate:+.2f} mg/L per minute with every aerator turning, "
                 "faster than water can lose oxygen",
+            )
+        )
+    # Data path plane.
+    if now is not None and (now - latest["ts"]).total_seconds() < 30:
+        age = (now - latest["ts"]).total_seconds()
+        evidence.append(
+            Evidence(
+                "freshness", "gateway_offline", "against", 0.2, f"readings arrive on time ({age:.0f} s ago)"
             )
         )
     falling_neighbours = [
@@ -202,7 +227,7 @@ def data_path_checks(
             "gateway_offline",
             "support",
             0.4,
-            f"{len(silent)} ponds silent since {hhmmss(last_seen) if last_seen else 'start'}",
+            f"{len(silent)} ponds silent",
             last_seen,
         )
     )

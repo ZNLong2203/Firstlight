@@ -18,7 +18,18 @@ from firstlight.core.config import get_settings
 router = APIRouter(prefix="/v1")
 log = logging.getLogger("firstlight.api.live")
 
-POND_FIELDS = ("farm", "gateway", "status", "last", "forecast", "freshness_s", "area_m2", "open_incident")
+POND_FIELDS = (
+    "farm",
+    "gateway",
+    "status",
+    "last",
+    "forecast",
+    "freshness_s",
+    "area_m2",
+    "open_incident",
+    "repair_tickets",
+    "sensor_ticket",
+)
 PROJECTION = dict.fromkeys(POND_FIELDS, 1)
 RECENT_INCIDENTS = 20
 RECONNECT = "reconnect"  # queued for a console that fell behind: its stream ends and it starts over

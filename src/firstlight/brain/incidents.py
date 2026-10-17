@@ -29,7 +29,7 @@ from firstlight.brain.evidence import (
     pond_checks,
     pond_readings,
 )
-from firstlight.brain.forecast import HYPOXIA_MGL, SAFE_MGL
+from firstlight.brain.forecast import HYPOXIA_MGL, SAFE_MGL, TURNING_AMPS
 from firstlight.core.metrics import Metrics
 
 log = logging.getLogger("firstlight.brain.incidents")
@@ -69,6 +69,15 @@ class Problem:
 def _stale(state: Doc, now: datetime, limit: float = STALE_S) -> bool:
     last = state.get("last")
     return last is None or (now - last["ts"]).total_seconds() > limit
+
+
+def stopped_unticketed(state: Doc) -> list[str]:
+    """Aerators switched on but drawing no current, leaving out those already waiting for repair."""
+    last = state.get("last") or {}
+    ticketed = {t["device"] for t in state.get("repair_tickets", [])}
+    if "aer" not in last:  # older readings only carry the counts
+        return ["?"] if last.get("aerators_running", 0) < last.get("aerators_on", 0) else []
+    return [a["id"] for a in last["aer"] if a["on"] and a["amp"] < TURNING_AMPS and a["id"] not in ticketed]
 
 
 def _dark(state: Doc) -> bool:
@@ -112,7 +121,7 @@ def find_problems(states: list[Doc], covered: set[str], now: datetime) -> list[P
         if _stale(state, now):
             signals.append("no_data")
         else:
-            if last.get("aerators_running", 0) < last.get("aerators_on", 0):
+            if stopped_unticketed(state):
                 signals.append("aerator_down")
             if "sensor_ticket" not in state:  # the probe is known to be wrong: its oxygen is not news
                 if last.get("do", 99.0) < HYPOXIA_MGL or (minutes is not None and minutes < RISK_MINUTES):
@@ -185,7 +194,9 @@ async def investigate(
     else:
         rows = await pond_readings(db, incident["ponds"][0], now)
         farm_ponds = [s for s in states if s.get("farm") == incident.get("farm")]
-        evidence = pond_checks(rows, farm_ponds)
+        own = by_id.get(incident["ponds"][0], {})
+        ticketed = frozenset(t["device"] for t in own.get("repair_tickets", []))
+        evidence = pond_checks(rows, farm_ponds, now, ticketed)
     return evidence, diagnose(evidence), rows
 
 
@@ -290,6 +301,10 @@ async def respond(
                     }
                 )
                 timeline.append({"t": now, "kind": "ticket", "text": text})
+                if step["target"] == "repair_aerator" and device and pond:
+                    # Until it is repaired, this aerator's 0 A is known and handled, not a new alarm.
+                    ticket = {"device": device, "incident": incident["_id"], "at": now}
+                    await db.pond_state.update_one({"_id": pond}, {"$push": {"repair_tickets": ticket}})
 
     then = playbook.get("then") if playbook else "escalate"
     if then == "dismiss":
@@ -305,8 +320,11 @@ async def respond(
     return status, timeline, actions, approvals
 
 
-async def recovered(db: Db, ponds: list[str], now: datetime, minutes: float) -> bool:
-    """DO at least 4 mg/L and not falling, in every pond, for the whole window."""
+async def recovered(db: Db, ponds: list[str], now: datetime, minutes: float, after: datetime) -> bool:
+    """DO at least 4 mg/L and not falling, in every pond, for `minutes` measured only after `after`
+    (the action), so readings from before the fix can never count as recovery."""
+    if now - after < timedelta(minutes=minutes):
+        return False
     since = now - timedelta(minutes=minutes)
     rows = await db.readings.find(
         {"meta.pond": {"$in": ponds}, "ts": {"$gte": since}}, {"meta.pond": 1, "ts": 1, "do": 1}
@@ -522,11 +540,11 @@ async def advance(
         return
 
     if status in ("verifying", "escalated", "awaiting_approval"):
-        if await recovered(db, incident["ponds"], now, policy.recovery_min):
+        since = incident.get("mitigated_at") or incident["opened_at"]
+        if await recovered(db, incident["ponds"], now, policy.recovery_min, since):
             await resolve(db, incident, now, metrics)
             return
         if status == "verifying":
-            since = incident.get("mitigated_at") or incident["opened_at"]
             if now - since > timedelta(minutes=policy.escalate_after_min):
                 await _escalate(db, incident, now, "no_recovery", policy.escalate_after_min)
         elif status == "awaiting_approval":
@@ -634,8 +652,35 @@ async def close_sensor_tickets(db: Db, states: list[Doc], now: datetime) -> None
                     }
                 },
             },
-            array_filters=[{"t.kind": "ticket", "t.status": "open"}],
+            array_filters=[{"t.kind": "ticket", "t.target": "clean_probe", "t.status": "open"}],
         )
+
+
+async def close_repair_tickets(db: Db, states: list[Doc], now: datetime) -> None:
+    """A repaired aerator draws current again: its ticket closes itself."""
+    for state in states:
+        last = state.get("last") or {}
+        amps = {a["id"]: a["amp"] for a in last.get("aer", [])}
+        for ticket in state.get("repair_tickets", []):
+            if _stale(state, now) or amps.get(ticket["device"], 0.0) < TURNING_AMPS:
+                continue
+            await db.pond_state.update_one(
+                {"_id": state["_id"]}, {"$pull": {"repair_tickets": {"device": ticket["device"]}}}
+            )
+            await db.incidents.update_one(
+                {"_id": ticket["incident"]},
+                {
+                    "$set": {"actions.$[t].status": "done", "actions.$[t].closed_at": now},
+                    "$push": {
+                        "timeline": {
+                            "t": now,
+                            "kind": "ticket_closed",
+                            "detail": f"{ticket['device']} runs again",
+                        }
+                    },
+                },
+                array_filters=[{"t.kind": "ticket", "t.target": "repair_aerator", "t.status": "open"}],
+            )
 
 
 async def incident_cycle(db: Db, metrics: Metrics, policy: Policy, now: datetime) -> int:
@@ -660,4 +705,5 @@ async def incident_cycle(db: Db, metrics: Metrics, policy: Policy, now: datetime
             log.exception("incident step failed", extra={"ctx": {"incident": incident["_id"]}})
     await retry_commands(db, now)
     await close_sensor_tickets(db, states, now)
+    await close_repair_tickets(db, states, now)
     return len(open_incidents)
