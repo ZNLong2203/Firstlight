@@ -6,9 +6,13 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Response
 
 from firstlight import __version__
+from firstlight.api.chaos import router as chaos_router
+from firstlight.api.commands import CommandHub, watch_commands
+from firstlight.api.commands import router as commands_router
 from firstlight.api.ingest import router as ingest_router
 from firstlight.api.live import Hub, flush_every_second, watch_pond_state
 from firstlight.api.live import router as live_router
@@ -29,9 +33,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")
     app.state.hub = Hub()
+    app.state.commands = CommandHub()
+    app.state.edge = httpx.AsyncClient(
+        base_url=settings.edge_control_url, timeout=5.0, headers={"X-Gateway-Token": settings.gateway_token}
+    )
     tasks = [
         asyncio.create_task(watch_pond_state(app.state.db, app.state.hub)),
         asyncio.create_task(flush_every_second(app.state.hub)),
+        asyncio.create_task(watch_commands(app.state.db, app.state.commands)),
     ]
     try:
         yield
@@ -41,12 +50,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        await app.state.edge.aclose()
         await app.state.mongo.close()
 
 
 app = FastAPI(title="Firstlight API", version=__version__, lifespan=lifespan)
 app.include_router(ingest_router)
 app.include_router(live_router)
+app.include_router(commands_router)
+app.include_router(chaos_router)
 
 
 @app.get("/healthz")

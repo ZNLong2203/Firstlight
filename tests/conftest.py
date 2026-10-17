@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -5,11 +6,13 @@ from typing import Any
 
 import httpx
 import pytest
+import uvicorn
 
 from firstlight.api.app import app, lifespan
 from firstlight.core import config
 
 TOKEN = "test-gateway-token"
+DEMO_CODE = "test-demo-code"
 
 
 @pytest.fixture
@@ -19,6 +22,7 @@ async def api(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[tuple[httpx.Asyn
         pytest.skip("needs a MongoDB (set MONGODB_URI)")
     monkeypatch.setenv("MONGODB_DB", f"firstlight_test_{uuid.uuid4().hex[:8]}")
     monkeypatch.setenv("GATEWAY_TOKEN", TOKEN)
+    monkeypatch.setenv("DEMO_CODE", DEMO_CODE)
     config.get_settings.cache_clear()
     try:
         async with lifespan(app):
@@ -32,3 +36,20 @@ async def api(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[tuple[httpx.Asyn
             await app.state.mongo.drop_database(db.name)
     finally:
         config.get_settings.cache_clear()
+
+
+@pytest.fixture
+async def live_api(api: tuple[httpx.AsyncClient, Any]) -> AsyncIterator[str]:
+    """The same app served over a real socket, for streaming clients such as a gateway's command channel."""
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, lifespan="off", log_config=None))
+    task = asyncio.create_task(server.serve())
+    for _ in range(250):
+        if server.started:
+            break
+        await asyncio.sleep(0.02)
+    port = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        await task

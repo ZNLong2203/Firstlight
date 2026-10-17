@@ -78,10 +78,23 @@ INDEXES: dict[str, list[IndexModel]] = {
     ],
     "commands": [
         IndexModel([("gateway", ASCENDING), ("status", ASCENDING)], name="gateway_status"),
+        IndexModel([("status", ASCENDING), ("created_at", ASCENDING)], name="status_created"),
         IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0),
     ],
     "alerts": [IndexModel([("alert_id", ASCENDING), ("transition", ASCENDING)], name="dedupe", unique=True)],
-    "incidents": [IndexModel([("pond", ASCENDING), ("status", ASCENDING)], name="pond_status")],
+    "incidents": [
+        IndexModel([("pond", ASCENDING), ("status", ASCENDING)], name="pond_status"),
+        IndexModel([("opened_at", DESCENDING)], name="opened"),
+        # One open incident per pond, gateway or farm: a second detector finds the first one instead.
+        IndexModel(
+            [("key", ASCENDING)], name="one_open_per_key", unique=True, partialFilterExpression={"open": True}
+        ),
+    ],
+    "chaos": [IndexModel([("status", ASCENDING), ("started_at", DESCENDING)], name="status_started")],
+    "events": [
+        IndexModel([("pond", ASCENDING), ("ts", DESCENDING)], name="pond_ts"),
+        IndexModel([("received_at", ASCENDING)], name="ttl_30d", expireAfterSeconds=30 * DAY),
+    ],
     "ingest_batches": [IndexModel([("received_at", ASCENDING)], name="ttl_1d", expireAfterSeconds=DAY)],
     "playbooks": [IndexModel([("cause", ASCENDING)], name="cause", unique=True)],
     "reports": [IndexModel([("farm", ASCENDING), ("date", ASCENDING)], name="farm_date", unique=True)],
@@ -107,7 +120,7 @@ async def ensure_schema(db: AsyncDatabase[dict[str, Any]]) -> None:
     for name in INDEXES:
         if name not in existing and name not in ("readings", "devices"):
             await db.create_collection(name)
-    for name in ("stream_state",):
+    for name in ("stream_state", "counters"):
         if name not in existing:
             await db.create_collection(name)
 

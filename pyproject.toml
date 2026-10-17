@@ -52,6 +52,7 @@ select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "SIM", "RUF"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.12"

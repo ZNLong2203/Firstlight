@@ -7,7 +7,7 @@ from typing import Any
 from ddtrace.trace import tracer
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pymongo import ReplaceOne, UpdateOne
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
@@ -140,6 +140,28 @@ def _pond_state_update(r: PondReading, gateway: str) -> list[dict[str, Any]]:
     ]
 
 
+async def _store_events(db: Any, batch: GatewayBatch, received: datetime) -> None:
+    """What the gateway did on its own (the failsafe). Ids come from the batch, so a retry adds nothing."""
+    docs = [
+        {
+            "_id": f"{batch.batch_id}:{i}",
+            "ts": e.ts,
+            "gateway": batch.gateway,
+            "pond": e.pond,
+            "kind": e.kind,
+            "device": e.device,
+            "detail": e.detail,
+            "received_at": received,
+        }
+        for i, e in enumerate(batch.events)
+    ]
+    try:
+        await db.events.insert_many(docs, ordered=False)
+    except BulkWriteError as exc:
+        if any(error.get("code") != 11000 for error in exc.details.get("writeErrors", [])):
+            raise
+
+
 @router.post("/ingest", dependencies=[Depends(require_gateway_token)])
 async def ingest(batch: GatewayBatch, request: Request) -> dict[str, Any]:
     db = request.app.state.db
@@ -162,6 +184,8 @@ async def ingest(batch: GatewayBatch, request: Request) -> dict[str, Any]:
         return {"stored": 0, "duplicate": True}
 
     try:
+        if batch.events:
+            await _store_events(db, batch, received)
         await db.readings.insert_many([_reading_doc(r, batch) for r in batch.readings], ordered=False)
     except Exception:
         await db.ingest_batches.delete_one({"_id": batch.batch_id})  # release the claim so the retry lands
