@@ -1,19 +1,29 @@
 """firstlight-api: HTTP entry point for gateways, the console and Datadog."""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 
 from firstlight import __version__
+from firstlight.api.ingest import router as ingest_router
 from firstlight.core.config import get_settings
-from firstlight.core.mongo import make_client
+from firstlight.core.metrics import Metrics
+from firstlight.core.mongo import database, make_client
+from firstlight.core.schema import ensure_schema
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     app.state.mongo = make_client(settings)
+    app.state.db = database(app.state.mongo, settings)
+    app.state.metrics = Metrics(settings)
+    try:
+        await ensure_schema(app.state.db)
+    except Exception:
+        logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")
     try:
         yield
     finally:
@@ -21,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Firstlight API", version=__version__, lifespan=lifespan)
+app.include_router(ingest_router)
 
 
 @app.get("/healthz")

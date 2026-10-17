@@ -19,7 +19,7 @@ x-datadog-env: &datadog-env
   DD_DOGSTATSD_PORT: "8125"
   DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
   DD_LOGS_INJECTION: "true"
-  DD_RUNTIME_METRICS_ENABLED: "true"
+  DD_RUNTIME_METRICS_ENABLED: ${DD_TRACE_ENABLED:-false}
 
 x-mongo-env: &mongo-env
   # Empty MONGODB_URI means the MongoDB container on this host (profile localdb).
@@ -90,6 +90,7 @@ services:
       <<: [*datadog-env, *mongo-env]
       DD_SERVICE: firstlight-api
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:-}
       DEMO_CODE: ${DEMO_CODE:-}
     labels:
       com.datadoghq.tags.service: firstlight-api
@@ -124,15 +125,16 @@ services:
     command: ["firstlight", "edge"]
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     environment:
       <<: *datadog-env
       DD_SERVICE: firstlight-edge
       FIRSTLIGHT_API_URL: http://api:8000
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:-}
       SIM_FARMS: ${SIM_FARMS:-50}
       SIM_PONDS_PER_FARM: ${SIM_PONDS_PER_FARM:-4}
       SIM_BATCH_SECONDS: ${SIM_BATCH_SECONDS:-10}
-      SIM_FARM_CLOCK_START: ${SIM_FARM_CLOCK_START:-02:00}
+      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:--5}
     labels:
       com.datadoghq.tags.service: firstlight-edge
       com.datadoghq.tags.env: ${DD_ENV:-local}
