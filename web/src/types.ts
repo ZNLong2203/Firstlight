@@ -94,6 +94,20 @@ export interface HistoryPoint {
   running?: number;
 }
 
+export interface NightBucket {
+  t: string;
+  min: number;
+  p10: number;
+  median: number;
+}
+
+export interface Night {
+  start: string;
+  end: string;
+  step_min: number;
+  buckets: NightBucket[];
+}
+
 export interface Meta {
   version: string;
   env: string;

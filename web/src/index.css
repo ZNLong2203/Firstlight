@@ -1,13 +1,29 @@
 @import "tailwindcss";
 
+/* Night water and dawn: warm ink rather than blue screen, paper-coloured text, and one warm accent for
+   everything about first light. Oxygen gets its own continuous scale in status.ts. */
 @theme {
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: Fraunces, "Iowan Old Style", Georgia, serif;
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  --color-night-950: #070c18;
-  --color-night-900: #0b1324;
-  --color-night-800: #111b31;
-  --color-night-700: #1a2742;
-  --color-dawn: #fb923c;
+
+  --color-ink-950: #0b1112;
+  --color-ink-900: #0f1718;
+  --color-ink-850: #131c1d;
+  --color-ink-800: #182322;
+  --color-ink-700: #22302f;
+  --color-ink-600: #304140;
+  --color-paper: #ece5d5;
+  --color-paper-2: #bdb7a8;
+  --color-mute: #8a8e84;
+  --color-faint: #5f655e;
+  --color-dawn: #f0a35e;
+  --color-dawn-soft: #f6c99b;
+  --color-rust: #e0714e;
+  --color-ochre: #d6b062;
+  --color-sea: #86bfa9;
+  --color-lavender: #aea4d6;
+  --color-fog: #8d9592;
 }
 
 :root {
@@ -16,33 +32,47 @@
 
 body {
   margin: 0;
-  background: var(--color-night-950);
-  color: #e2e8f0;
+  background: var(--color-ink-950);
+  color: var(--color-paper);
   font-family: var(--font-sans);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.blind-hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(100 116 139 / 0.18) 0 6px, transparent 6px 12px);
+.font-mono,
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-@keyframes alert-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.55);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgb(239 68 68 / 0);
-  }
+/* Large numerals in the display face read like an instrument, not a spreadsheet. */
+.numeral {
+  font-family: var(--font-display);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
 }
 
-.alert-glow {
-  animation: alert-glow 1.6s ease-in-out infinite;
+/* No data: fog. A probe that cannot be trusted: lavender rain. */
+.hatch-fog {
+  background-color: #151d1d;
+  background-image: repeating-linear-gradient(135deg, rgb(141 149 146 / 0.22) 0 1.5px, transparent 1.5px 6px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .alert-glow,
-  .animate-ping {
-    animation: none;
-  }
+.hatch-lavender {
+  background-color: #1a1a24;
+  background-image: repeating-linear-gradient(135deg, rgb(174 164 214 / 0.3) 0 1.5px, transparent 1.5px 6px);
+}
+
+.hairline {
+  border-color: var(--color-ink-700);
+}
+
+::selection {
+  background: rgb(240 163 94 / 0.35);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-dawn);
+  outline-offset: 2px;
 }

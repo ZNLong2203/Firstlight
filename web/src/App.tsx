@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Attention } from "./components/Attention";
 import { ChaosPanel } from "./components/ChaosPanel";
-import { DawnReport } from "./components/DawnReport";
-import { countBy, FleetMap } from "./components/FleetMap";
+import { EstateMap } from "./components/EstateMap";
 import { IncidentDrawer } from "./components/IncidentDrawer";
+import { Masthead } from "./components/Masthead";
+import { NightCurve } from "./components/NightCurve";
+import { Now } from "./components/Now";
 import { PondDrawer } from "./components/PondDrawer";
-import { TopBar } from "./components/TopBar";
+import { Tonight } from "./components/Tonight";
 import { useDemoCode } from "./demo";
 import { effectiveStatus } from "./format";
-import { LEGEND } from "./status";
-import type { AiStats, Incident, Meta, Report } from "./types";
+import type { AiStats, Incident, Meta, Night, Report, Status } from "./types";
 import { useLivePonds, useNow } from "./useLive";
 
 const RECENT_MS = 60 * 60_000; // a pond's drawer keeps showing its last incident for an hour
@@ -76,6 +76,28 @@ function useDawnReport(): [{ estate: Report | null; farms: Report[] }, () => voi
   return [report, load];
 }
 
+/** The estate's oxygen through the night; the API recomputes it once a minute. */
+function useNight(): Night | null {
+  const [night, setNight] = useState<Night | null>(null);
+  useEffect(() => {
+    const load = () =>
+      fetch("/v1/night")
+        .then((r) => (r.ok ? (r.json() as Promise<Night>) : null))
+        .then((body) => body && setNight(body))
+        .catch(() => undefined);
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return night;
+}
+
+function countBy(statuses: Status[]): Record<Status, number> {
+  const counts: Record<Status, number> = { ok: 0, watch: 0, alert: 0, sensor: 0, blind: 0 };
+  for (const status of statuses) counts[status] += 1;
+  return counts;
+}
+
 function useMeta(): Meta | null {
   const [meta, setMeta] = useState<Meta | null>(null);
   useEffect(() => {
@@ -92,17 +114,23 @@ export function App() {
   const now = useNow();
   const meta = useMeta();
   const aiStats = useAiStats();
+  const night = useNight();
   const [dawn, reloadDawn] = useDawnReport();
   const [demoCode, setDemoCode] = useDemoCode();
   const [selected, select] = useSelectedPond();
   const list = useMemo(() => [...ponds.values()], [ponds]);
   const counts = countBy(list.map((p) => effectiveStatus(p, now)));
+  const latest = list.reduce<number | null>((newest, p) => {
+    const t = p.last ? Date.parse(p.last.ts) : null;
+    return t !== null && (newest === null || t > newest) ? t : newest;
+  }, null);
   const offset = meta?.farm_clock_offset_hours ?? null;
   const open = selected ? ponds.get(selected) : undefined;
   const openIncident = selected?.startsWith("INC-") ? incidents.get(selected) : undefined;
   const drawer = Boolean(open || openIncident);
   const toggle = useCallback((id: string) => select(id === selected ? null : id), [select, selected]);
   const close = useCallback(() => select(null), [select]);
+  const incidentList = useMemo(() => [...incidents.values()], [incidents]);
 
   useEffect(() => {
     document.title = counts.alert ? `(${counts.alert}) Firstlight` : "Firstlight";
@@ -110,48 +138,38 @@ export function App() {
 
   return (
     <div className="min-h-dvh">
-      <TopBar now={now} offsetHours={offset} counts={counts} link={link} />
+      <Masthead now={now} offsetHours={offset} counts={counts} total={list.length} latest={latest} link={link} inset={drawer} />
+      <NightCurve
+        night={night}
+        incidents={incidentList}
+        now={now}
+        offsetHours={offset ?? 0}
+        total={list.length}
+        inset={drawer}
+        onSelect={toggle}
+      />
       {link === "reconnecting" && (
-        <div className="bg-amber-400/15 px-4 py-2 text-center text-sm text-amber-200" role="alert">
-          Connection to the farms lost. Reconnecting; the values below may be out of date.
+        <div className="border-b border-ochre/30 bg-ochre/10 px-4 py-2 text-center text-[13px] text-ochre" role="alert">
+          The link to the farms dropped. Reconnecting; what you see may be out of date.
         </div>
       )}
       <main
-        className={`mx-auto max-w-[1600px] space-y-8 px-4 py-6 transition-opacity sm:px-6 ${
-          drawer ? "xl:pr-[544px]" : ""
-        } ${link === "live" ? "" : "opacity-60"}`}
+        className={`mx-auto max-w-[1600px] px-4 pb-24 pt-8 transition-opacity sm:px-8 ${drawer ? "xl:pr-[564px]" : ""} ${
+          link === "live" ? "" : "opacity-60"
+        }`}
       >
         {link === "connecting" && list.length === 0 ? (
-          <p className="py-20 text-center text-sm text-slate-500">Connecting to the farms…</p>
+          <p className="py-24 text-center font-display text-[20px] italic text-mute">Reaching the farms…</p>
         ) : list.length === 0 ? (
-          <p className="py-20 text-center text-sm text-slate-500">Waiting for the first gateway to report.</p>
+          <p className="py-24 text-center font-display text-[20px] italic text-mute">Waiting for the first gateway to report.</p>
         ) : (
-          <>
-            {dawn.estate && <DawnReport estate={dawn.estate} farms={dawn.farms} />}
-            <section aria-labelledby="attention-title">
-              <h2 id="attention-title" className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Needs attention
-              </h2>
-              <Attention
-                ponds={ponds}
-                incidents={incidents}
-                now={now}
-                offsetHours={offset ?? 0}
-                selected={selected}
-                onSelect={toggle}
-                aiStats={aiStats}
-              />
-            </section>
-            <section aria-labelledby="fleet-title">
-              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="fleet-title" className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  All ponds · dissolved oxygen, mg/L
-                </h2>
-                <Legend />
-              </div>
-              <FleetMap ponds={list} now={now} selected={selected} onSelect={toggle} />
-            </section>
-          </>
+          <div className="space-y-14">
+            <div className={`grid gap-x-14 gap-y-12 ${drawer ? "" : "xl:grid-cols-[minmax(0,1fr)_400px]"}`}>
+              <Now ponds={ponds} incidents={incidents} now={now} offsetHours={offset ?? 0} selected={selected} onSelect={toggle} />
+              <Tonight incidents={incidents} offsetHours={offset ?? 0} aiStats={aiStats} dawn={dawn} onSelect={toggle} />
+            </div>
+            <EstateMap ponds={list} now={now} selected={selected} onSelect={toggle} />
+          </div>
         )}
       </main>
       {open && (
@@ -182,18 +200,5 @@ export function App() {
         onReport={reloadDawn}
       />
     </div>
-  );
-}
-
-function Legend() {
-  return (
-    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-      {LEGEND.map(([swatch, label]) => (
-        <li key={label} className="flex items-center gap-1.5">
-          <span className={`size-2.5 rounded-sm ${swatch}`} />
-          {label}
-        </li>
-      ))}
-    </ul>
   );
 }

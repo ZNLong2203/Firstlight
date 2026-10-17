@@ -29,8 +29,8 @@ echarts.use([
 
 type Option = echarts.ComposeOption<LineSeriesOption | GridComponentOption | TooltipComponentOption>;
 
-const AXIS = { color: "#64748b", fontSize: 10, fontFamily: "JetBrains Mono, ui-monospace, monospace" };
-const SPLIT = { lineStyle: { color: "#1a2742" } };
+const AXIS = { color: "#5f655e", fontSize: 10, fontFamily: "JetBrains Mono, ui-monospace, monospace" };
+const SPLIT = { lineStyle: { color: "#1c2828" } };
 
 /** Where the trend crosses 3 mg/L, or where it is in an hour, drawn from the latest reading. */
 function forecastLine(pond: PondState): [number, number][] {
@@ -57,7 +57,7 @@ function buildOption(
     type: "time" as const,
     min: now - 2 * 3_600_000,
     max: end,
-    axisLine: { lineStyle: { color: "#1a2742" } },
+    axisLine: { lineStyle: { color: "#22302f" } },
     axisTick: { show: false },
     splitLine: { show: false },
   };
@@ -68,12 +68,12 @@ function buildOption(
       { left: 34, right: 12, top: 22, height: "60%" },
       { left: 34, right: 12, top: "78%", bottom: 22 },
     ],
-    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: "#475569" } },
+    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: "#5f655e" } },
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#0b1324",
-      borderColor: "#1a2742",
-      textStyle: { color: "#e2e8f0", fontSize: 12 },
+      backgroundColor: "#0f1718",
+      borderColor: "#304140",
+      textStyle: { color: "#ece5d5", fontSize: 12, fontFamily: "Be Vietnam Pro, ui-sans-serif, sans-serif" },
       valueFormatter: (value) => (typeof value === "number" ? value.toFixed(2) : String(value)),
       axisPointer: { label: { show: false } },
     },
@@ -107,19 +107,19 @@ function buildOption(
         xAxisIndex: 0,
         yAxisIndex: 0,
         showSymbol: false,
-        lineStyle: { color: "#7dd3fc", width: 2 },
-        itemStyle: { color: "#7dd3fc" },
+        lineStyle: { color: "#ece5d5", width: 1.8 },
+        itemStyle: { color: "#ece5d5" },
         data: history.map((p) => [Date.parse(p.ts), p.do]),
         markArea: {
           silent: true,
           label: { position: "insideTopLeft", fontSize: 10, distance: 4 },
           data: [
             [
-              { name: "hypoxia", yAxis: 0, itemStyle: { color: "rgba(239,68,68,0.12)" }, label: { color: "#f87171" } },
+              { name: "hypoxia", yAxis: 0, itemStyle: { color: "rgba(224,113,78,0.10)" }, label: { color: "#e0714e", fontFamily: "Be Vietnam Pro, sans-serif" } },
               { yAxis: HYPOXIA_MGL },
             ],
             [
-              { name: "stress", yAxis: HYPOXIA_MGL, itemStyle: { color: "rgba(251,191,36,0.07)" }, label: { color: "#fbbf24" } },
+              { name: "stress", yAxis: HYPOXIA_MGL, itemStyle: { color: "rgba(214,176,98,0.06)" }, label: { color: "#d6b062", fontFamily: "Be Vietnam Pro, sans-serif" } },
               { yAxis: SAFE_MGL },
             ],
           ],
@@ -131,11 +131,11 @@ function buildOption(
             {
               name: "now",
               xAxis: now,
-              lineStyle: { color: "#475569", type: "dotted" },
-              label: { formatter: "now", position: "end", color: "#94a3b8", fontSize: 10 },
+              lineStyle: { color: "#f0a35e", type: "solid", width: 1 },
+              label: { formatter: "now", position: "end", color: "#f0a35e", fontSize: 10 },
             },
-            { yAxis: HYPOXIA_MGL, lineStyle: { color: "#ef4444", type: "solid", width: 1 }, label: { show: false } },
-            { yAxis: SAFE_MGL, lineStyle: { color: "#fbbf24", type: "dashed", width: 1 }, label: { show: false } },
+            { yAxis: HYPOXIA_MGL, lineStyle: { color: "#e0714e", type: "dashed", width: 1 }, label: { show: false } },
+            { yAxis: SAFE_MGL, lineStyle: { color: "#d6b062", type: "dashed", width: 1 }, label: { show: false } },
           ],
         },
       },
@@ -145,8 +145,8 @@ function buildOption(
         xAxisIndex: 0,
         yAxisIndex: 0,
         showSymbol: false,
-        lineStyle: { color: "#fb923c", width: 2, type: "dashed" },
-        itemStyle: { color: "#fb923c" },
+        lineStyle: { color: "#f0a35e", width: 1.8, type: "dashed" },
+        itemStyle: { color: "#f0a35e" },
         tooltip: { show: false },
         data: forecast,
         markPoint:
@@ -154,8 +154,8 @@ function buildOption(
             ? {
                 symbol: "circle",
                 symbolSize: 8,
-                itemStyle: { color: "#ef4444" },
-                label: { show: true, position: "bottom", color: "#fca5a5", fontSize: 10, formatter: clock(forecast[1][0]) },
+                itemStyle: { color: "#e0714e" },
+                label: { show: true, position: "bottom", color: "#e0714e", fontSize: 10, formatter: clock(forecast[1][0]) },
                 data: [{ name: "3 mg/L", coord: forecast[1] }],
               }
             : undefined,
@@ -167,9 +167,9 @@ function buildOption(
         xAxisIndex: 1,
         yAxisIndex: 1,
         showSymbol: false,
-        lineStyle: { color: "#34d399", width: 1.5 },
-        itemStyle: { color: "#34d399" },
-        areaStyle: { color: "rgba(52,211,153,0.15)" },
+        lineStyle: { color: "#86bfa9", width: 1.4 },
+        itemStyle: { color: "#86bfa9" },
+        areaStyle: { color: "rgba(134,191,169,0.14)" },
         data: history.filter((p) => p.running != null).map((p) => [Date.parse(p.ts), p.running!]),
       },
     ],

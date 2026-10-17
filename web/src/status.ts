@@ -1,87 +1,89 @@
 import type { IncidentStatus, Status } from "./types";
 
-/** Every status colour in one place: tiles, cards, badges and dots stay consistent. */
+/** Every status colour in one place, so the map, the queue and the drawers say the same thing. */
 export const STATUS_LABEL: Record<Status, string> = {
   ok: "Safe",
   watch: "Watch",
   alert: "Alert",
-  sensor: "Sensor",
+  sensor: "Probe not trusted",
   blind: "Blind",
 };
 
 export const STATUS_ORDER: Status[] = ["alert", "blind", "watch", "sensor", "ok"];
 
-export const TILE: Record<Status, string> = {
-  ok: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25 hover:bg-emerald-500/25",
-  watch: "bg-amber-400/25 text-amber-100 ring-amber-300/60 hover:bg-amber-400/35",
-  alert: "bg-red-500/80 text-white ring-red-300/80 alert-glow hover:bg-red-500",
-  sensor: "bg-violet-500/25 text-violet-100 ring-violet-300/60 hover:bg-violet-500/35",
-  blind: "blind-hatch text-slate-400 ring-slate-500/40 hover:ring-slate-300/60",
+export const STATUS_TEXT: Record<Status, string> = {
+  alert: "text-rust",
+  blind: "text-fog",
+  watch: "text-ochre",
+  sensor: "text-lavender",
+  ok: "text-sea",
 };
 
-export const CARD: Record<Status, string> = {
-  alert: "border-red-500/70 bg-red-500/10 alert-glow",
-  blind: "border-slate-500/50 bg-night-800 blind-hatch",
-  watch: "border-amber-400/50 bg-amber-400/[0.06]",
-  sensor: "border-violet-400/50 bg-violet-500/[0.07]",
-  ok: "border-night-700 bg-night-800",
+/** The ring around a pond on the map: only for ponds that need a person. */
+export const STATUS_RING: Record<Status, string> = {
+  alert: "ring-2 ring-rust ring-offset-2 ring-offset-ink-900",
+  watch: "ring-[1.5px] ring-ochre ring-offset-1 ring-offset-ink-900",
+  blind: "",
+  sensor: "",
+  ok: "",
 };
 
-export const BADGE: Record<Status, string> = {
-  alert: "bg-red-500 text-white",
-  blind: "bg-slate-600 text-slate-100",
-  watch: "bg-amber-400 text-night-950",
-  sensor: "bg-violet-400 text-night-950",
-  ok: "bg-emerald-500 text-night-950",
-};
-
-export const DOT: Record<Status, string> = {
-  alert: "bg-red-500",
-  watch: "bg-amber-400",
-  sensor: "bg-violet-400",
-  blind: "bg-slate-400",
-  ok: "bg-emerald-400",
-};
-
-export const LEGEND: [string, string][] = [
-  ["bg-emerald-500/40", "Safe"],
-  ["bg-amber-400/60", "Watch: under 4, falling or an aerator down"],
-  ["bg-red-500", "Alert: under 3 within 30 min"],
-  ["bg-violet-400/70", "Sensor: probe wrong, ticket open"],
-  ["blind-hatch ring-1 ring-slate-500/50", "Blind: no data"],
+/** Dissolved oxygen as the colour of the water: deep teal when it is rich, sand near 4, rust under 3. */
+const OXYGEN: [number, [number, number, number]][] = [
+  [2.5, [140, 44, 40]],
+  [3.0, [181, 72, 46]],
+  [3.5, [205, 120, 58]],
+  [4.0, [204, 168, 82]],
+  [4.5, [118, 165, 136]],
+  [5.0, [66, 142, 133]],
+  [6.0, [44, 112, 120]],
+  [7.0, [38, 90, 108]],
 ];
+
+function oxygenRgb(mgl: number): [number, number, number] {
+  if (mgl <= OXYGEN[0][0]) return OXYGEN[0][1];
+  for (let i = 1; i < OXYGEN.length; i++) {
+    const [x1, c1] = OXYGEN[i];
+    if (mgl <= x1) {
+      const [x0, c0] = OXYGEN[i - 1];
+      const f = (mgl - x0) / (x1 - x0);
+      return [0, 1, 2].map((k) => Math.round(c0[k] + (c1[k] - c0[k]) * f)) as [number, number, number];
+    }
+  }
+  return OXYGEN.at(-1)![1];
+}
+
+export function oxygenColor(mgl: number): string {
+  const [r, g, b] = oxygenRgb(mgl);
+  return `rgb(${r} ${g} ${b})`;
+}
+
+/** Ink on the light sandy middle of the scale, paper on the deep ends. */
+export function textOn(mgl: number): string {
+  const [r, g, b] = oxygenRgb(mgl).map((c) => (c / 255) ** 2.2);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.2 ? "#0b1112" : "#ece5d5";
+}
 
 export const INCIDENT_LABEL: Record<IncidentStatus, string> = {
   investigating: "Investigating",
   mitigating: "Acting",
-  verifying: "Verifying",
-  monitoring: "Watching blind",
-  awaiting_approval: "Needs approval",
-  escalated: "Escalated",
-  resolved: "Resolved",
+  verifying: "Verifying recovery",
+  monitoring: "Watching, blind",
+  awaiting_approval: "Needs your approval",
+  escalated: "Escalated to a person",
+  resolved: "Recovered",
   dismissed: "False alarm stopped",
 };
 
-export const INCIDENT_BADGE: Record<IncidentStatus, string> = {
-  investigating: "bg-sky-400 text-night-950",
-  mitigating: "bg-amber-400 text-night-950",
-  verifying: "bg-teal-300 text-night-950",
-  monitoring: "bg-slate-500 text-white",
-  awaiting_approval: "bg-orange-500 text-white",
-  escalated: "bg-red-500 text-white",
-  resolved: "bg-emerald-500 text-night-950",
-  dismissed: "bg-violet-400 text-night-950",
-};
-
-export const INCIDENT_CARD: Record<IncidentStatus, string> = {
-  investigating: "border-sky-400/60 bg-sky-400/[0.07]",
-  mitigating: "border-amber-400/60 bg-amber-400/[0.07]",
-  verifying: "border-teal-300/60 bg-teal-300/[0.06]",
-  monitoring: "border-slate-500/60 bg-night-800 blind-hatch",
-  awaiting_approval: "border-orange-500/80 bg-orange-500/10 alert-glow",
-  escalated: "border-red-500/80 bg-red-500/10 alert-glow",
-  resolved: "border-emerald-500/30 bg-emerald-500/[0.05]",
-  dismissed: "border-violet-400/30 bg-violet-500/[0.05]",
+export const INCIDENT_TONE: Record<IncidentStatus, string> = {
+  investigating: "text-paper",
+  mitigating: "text-ochre",
+  verifying: "text-sea",
+  monitoring: "text-fog",
+  awaiting_approval: "text-dawn",
+  escalated: "text-rust",
+  resolved: "text-sea",
+  dismissed: "text-lavender",
 };
 
 /** Most urgent first. */

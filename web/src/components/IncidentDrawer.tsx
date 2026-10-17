@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { target } from "../format";
 import type { Incident } from "../types";
 import { IncidentPanel } from "./IncidentPanel";
+import { CloseButton } from "./PondDrawer";
 
 interface Props {
   incident: Incident;
@@ -22,35 +23,26 @@ export function IncidentDrawer({ incident, offsetHours, demoCode, onSelect, onCl
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-30 flex w-full flex-col overflow-y-auto border-l border-night-700 bg-night-900 shadow-2xl shadow-black/60 sm:w-[520px]"
+      className="fixed inset-y-0 right-0 z-30 flex w-full flex-col overflow-y-auto border-l border-ink-700 bg-ink-900 shadow-[-24px_0_48px_rgba(0,0,0,0.45)] sm:w-[548px]"
       aria-label={`Incident ${incident._id}`}
     >
-      <header className="flex items-start justify-between gap-4 border-b border-night-700 px-5 py-4">
+      <header className="flex items-start justify-between gap-4 border-b border-ink-700 px-6 pb-5 pt-6">
         <div>
-          <h2 className="text-lg font-semibold text-white">{target(incident)}</h2>
-          <p className="mt-1 font-mono text-xs text-slate-400">{incident._id}</p>
+          <p className="font-mono text-[12px] text-faint">{incident._id}</p>
+          <h2 className="mt-1.5 font-display text-[30px] leading-tight text-paper">{target(incident)}</h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md p-1.5 text-slate-400 transition hover:bg-night-800 hover:text-white"
-          aria-label="Close"
-        >
-          <svg viewBox="0 0 20 20" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
-          </svg>
-        </button>
+        <CloseButton onClose={onClose} />
       </header>
       <IncidentPanel incident={incident} offsetHours={offsetHours} demoCode={demoCode} />
-      <section className="px-5 py-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Ponds</h3>
-        <div className="mt-2 flex flex-wrap gap-2">
+      <section className="px-6 py-5">
+        <h3 className="font-display text-[16px] text-paper">The ponds it covers</h3>
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {incident.ponds.map((pond) => (
             <button
               key={pond}
               type="button"
               onClick={() => onSelect(pond)}
-              className="rounded-md bg-night-800 px-2.5 py-1 font-mono text-xs text-slate-200 ring-1 ring-night-700 transition hover:ring-slate-500"
+              className="rounded-[3px] border border-ink-600 px-2 py-1 font-mono text-[12px] text-paper-2 transition-colors hover:border-paper/40 hover:text-paper"
             >
               {pond}
             </button>
