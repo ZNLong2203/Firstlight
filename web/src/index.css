@@ -1,7 +1,48 @@
-:root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
-body { margin: 0; min-height: 100vh; background: #0f172a; color: #e2e8f0; }
-.shell { min-height: 100vh; display: grid; place-content: center; text-align: center; gap: 4px; }
-h1 { margin: 0; color: #fb923c; font-size: 40px; }
-.tagline { margin: 0; font-size: 18px; }
-.muted { color: #94a3b8; }
-.status { margin-top: 16px; font: 13px ui-monospace, Menlo, monospace; color: #64748b; }
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --color-night-950: #070c18;
+  --color-night-900: #0b1324;
+  --color-night-800: #111b31;
+  --color-night-700: #1a2742;
+  --color-dawn: #fb923c;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-night-950);
+  color: #e2e8f0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.blind-hatch {
+  background-image: repeating-linear-gradient(135deg, rgb(100 116 139 / 0.18) 0 6px, transparent 6px 12px);
+}
+
+@keyframes alert-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(239 68 68 / 0);
+  }
+}
+
+.alert-glow {
+  animation: alert-glow 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert-glow,
+  .animate-ping {
+    animation: none;
+  }
+}
