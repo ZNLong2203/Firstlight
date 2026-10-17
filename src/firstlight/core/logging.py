@@ -36,5 +36,6 @@ def configure_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
-    for noisy in ("uvicorn.access",):
+    # One line per HTTP request would be 50 gateways x 6 per minute: requests are traced, not logged.
+    for noisy in ("uvicorn.access", "httpx"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
