@@ -125,3 +125,21 @@ async def test_forecast_restarts_when_an_aerator_stops(api: tuple[httpx.AsyncCli
     assert result[0]["slope_per_min"] == pytest.approx(-0.05, rel=0.05)
     assert result[0]["points"] == 12 and 30 < result[0]["minutes_to_hypoxia"] < 45
     assert result[0]["rate_3m"] == pytest.approx(-0.05, rel=0.1)
+
+
+async def test_rate_needs_two_minutes_of_readings(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """Three noisy readings 10 s apart can look like a cliff; the rate is withheld until the window fills."""
+    _, db = api
+    noisy = [5.0, 4.95, 4.9]  # -0.3 mg/L per minute between neighbours, pure sensor noise
+    await db.readings.insert_many(
+        [
+            {
+                "ts": NOW - timedelta(seconds=10 * (2 - i)),
+                "meta": {"farm": "BL-01", "pond": "q", "gateway": "g"},
+                "do": do,
+            }
+            for i, do in enumerate(noisy)
+        ]
+    )
+    result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
+    assert result[0]["rate_3m"] is None

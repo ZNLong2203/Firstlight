@@ -6,6 +6,7 @@ from typing import Any
 HYPOXIA_MGL = 3.0  # shrimp are stressed below this (Global Seafood Alliance)
 SAFE_MGL = 4.0
 MIN_POINTS = 9  # 90 s of readings in the current regime before a slope means anything
+RATE_POINTS = 12  # the 3-minute rate needs 2 minutes of readings; two points 10 s apart are mostly noise
 FALLING = -0.005  # mg/L per minute; anything flatter is noise
 TURNING_AMPS = 0.5
 
@@ -54,6 +55,7 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                         "$derivative": {"input": "$do", "unit": "minute"},
                         "window": {"range": [-180, 0], "unit": "second"},
                     },
+                    "n_3m": {"$count": {}, "window": {"range": [-180, 0], "unit": "second"}},
                 },
             }
         },
@@ -70,6 +72,7 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                             "sd_t": "$sd_t",
                             "n": "$n",
                             "rate_3m": "$rate_3m",
+                            "n_3m": "$n_3m",
                         },
                     }
                 },
@@ -114,7 +117,7 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                 "slope_per_min": 1,
                 "minutes_to_hypoxia": 1,
                 "points": "$last.n",
-                "rate_3m": "$last.rate_3m",
+                "rate_3m": {"$cond": [{"$gte": ["$last.n_3m", RATE_POINTS]}, "$last.rate_3m", None]},
             }
         },
     ]
