@@ -6,9 +6,10 @@ import pytest
 
 from firstlight.brain.forecast import classify, forecast_pipeline
 from firstlight.brain.main import forecast_once
-from firstlight.brain.rollup import minute_rollup
+from firstlight.brain.rollup import roll_up_minutes
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
+from firstlight.core.schema import ensure_schema
 
 NOW = datetime.now(UTC).replace(microsecond=0)
 
@@ -71,11 +72,41 @@ async def test_minute_rollup_is_correct_and_idempotent(api: tuple[httpx.AsyncCli
     ]
     await db.readings.insert_many(docs)
     for _ in range(2):
-        await (await db.readings.aggregate(minute_rollup(start, start + timedelta(minutes=1)))).to_list()
+        await roll_up_minutes(db, start + timedelta(minutes=2))
     rows = await db.readings_1m.find({}).to_list()
     assert len(rows) == 1
+    assert rows[0]["minute"] == start and rows[0]["meta"]["pond"] == "p1"
     assert rows[0]["n"] == 6 and rows[0]["do_min"] == 4.0 and rows[0]["do_max"] == pytest.approx(4.5)
     assert rows[0]["do_avg"] == pytest.approx(4.25)
+
+
+async def test_minute_rollups_catch_up_across_a_silence(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """A brain that was down rolls up what it missed, an hour per cycle; a stretch without any data is
+    skipped rather than retried forever."""
+    _, db = api
+    base = (NOW - timedelta(hours=3)).replace(second=0)
+    meta = {"farm": "BL-01", "pond": "p1", "gateway": "g"}
+    minutes = [0, 1, 2, 130, 131]  # two hours of silence in between
+    await db.readings.insert_many(
+        [{"ts": base + timedelta(minutes=m, seconds=5), "meta": meta, "do": 5.0} for m in minutes]
+    )
+    written = [await roll_up_minutes(db, NOW) for _ in range(3)]
+    rows = await db.readings_1m.find({}, sort=[("minute", 1)]).to_list()
+    assert [round((r["minute"] - base).total_seconds() / 60) for r in rows] == minutes
+    assert written == [3, 2, 0]
+
+
+async def test_rollups_in_a_regular_collection_give_way_to_a_time_series(
+    api: tuple[httpx.AsyncClient, Any],
+) -> None:
+    _, db = api
+    await db.drop_collection("readings_1m")
+    await db.create_collection("readings_1m")  # how the rollups used to be kept
+    await db.readings_1m.insert_one({"_id": {"pond": "p1", "minute": NOW}, "do_avg": 5.0})
+    await ensure_schema(db)
+    info = await (await db.list_collections(filter={"name": "readings_1m"})).to_list()
+    assert info[0]["type"] == "timeseries"
+    assert await db.readings_1m.count_documents({}) == 0, "derived data: rebuilt from the raw readings"
 
 
 async def test_forecast_once_writes_status_and_forecast(api: tuple[httpx.AsyncClient, Any]) -> None:

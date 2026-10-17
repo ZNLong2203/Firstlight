@@ -132,7 +132,7 @@ On the demo so far, 9 incidents were investigated:
 
 ### F. Data lifecycle and the dawn report
 
-- Every minute, `$merge` rolls `readings` up into `readings_1m`, and every hour into `readings_1h`. `$merge` cannot target a time series collection, so the rollups are regular collections.
+- Every minute the brain rolls `readings` up into `readings_1m`, a time series collection like the readings, and every hour `$merge` rolls those up into `readings_1h`. The brain rolls up every complete minute after the newest one stored, so a restart leaves no hole.
 - Retention:
 
   | Collection | Kept for |

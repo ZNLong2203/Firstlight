@@ -17,7 +17,7 @@ from firstlight.brain.incidents import Policy, incident_cycle
 from firstlight.brain.notifier import Notifier
 from firstlight.brain.playbooks import ensure_playbooks
 from firstlight.brain.reports import dawn_report_due
-from firstlight.brain.rollup import hour_rollup, minute_rollup
+from firstlight.brain.rollup import hour_rollup, roll_up_minutes
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
 from firstlight.core.mongo import database, make_client
@@ -79,15 +79,15 @@ async def forecast_once(db: AsyncDatabase[dict[str, Any]], metrics: Metrics, now
 
 
 async def rollups_due(db: AsyncDatabase[dict[str, Any]], now: datetime, done: dict[str, datetime]) -> None:
-    minute = now.replace(second=0, microsecond=0)
-    previous_minute = minute - timedelta(minutes=1)
-    if now.second >= 15 and done.get("minute") != previous_minute:
-        with tracer.trace("brain.rollup", service="firstlight-brain", resource="readings_1m"):
-            await (await db.readings.aggregate(minute_rollup(previous_minute, minute))).to_list()
-        done["minute"] = previous_minute
+    with tracer.trace("brain.rollup", service="firstlight-brain", resource="readings_1m"):
+        await roll_up_minutes(db, now)
     hour = now.replace(minute=0, second=0, microsecond=0)
     previous_hour = hour - timedelta(hours=1)
     if now.minute >= 2 and done.get("hour") != previous_hour:
+        # Only once the minute rollups have reached the end of that hour, or it would be summed half full.
+        last_minute = {"minute": {"$gte": hour - timedelta(minutes=1)}}
+        if not await db.readings_1m.find_one(last_minute, {"_id": 1}):
+            return
         with tracer.trace("brain.rollup", service="firstlight-brain", resource="readings_1h"):
             await (await db.readings_1m.aggregate(hour_rollup(previous_hour, hour))).to_list()
         done["hour"] = previous_hour

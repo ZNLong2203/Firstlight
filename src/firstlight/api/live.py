@@ -193,9 +193,9 @@ async def history(
         ]
         return [r async for r in await db.readings.aggregate(pipeline)]
     rows = db.readings_1m.find(
-        {"_id.pond": pond_id, "_id.minute": {"$gte": since}},
+        {"meta.pond": pond_id, "minute": {"$gte": since}},
         {"_id": 0, "ts": "$minute", "do": "$do_avg", "do_min": 1, "do_max": 1, "temp": 1, "ph": 1},
-    ).sort("_id.minute", 1)
+    ).sort("minute", 1)
     return [r async for r in rows]
 
 

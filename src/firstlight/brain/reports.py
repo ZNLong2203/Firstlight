@@ -36,8 +36,8 @@ def pond_minutes_pipeline(start: datetime, end: datetime) -> list[Doc]:
         {"$match": {"minute": {"$gte": start, "$lt": end}}},
         {
             "$group": {
-                "_id": "$_id.pond",
-                "farm": {"$first": "$farm"},
+                "_id": "$meta.pond",
+                "farm": {"$first": "$meta.farm"},
                 "min_do": {"$min": "$do_min"},
                 "below_safe": {"$sum": {"$cond": [{"$lt": ["$do_min", SAFE_MGL]}, 1, 0]}},
                 "minutes": {"$sum": 1},

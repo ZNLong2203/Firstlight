@@ -58,6 +58,21 @@ async def test_ponds_and_history(api: tuple[httpx.AsyncClient, Any]) -> None:
     assert [p["_id"] for p in ponds] == ["BL-01-A1"] and ponds[0]["status"] == "ok"
     rows = (await client.get("/v1/ponds/BL-01-A1/history?minutes=30")).json()
     assert len(rows) == 12 and rows[0]["ts"] < rows[-1]["ts"] and rows[0]["running"] == 1
+    # Longer spans come from the minute rollups.
+    await db.readings_1m.insert_many(
+        [
+            {
+                "minute": now.replace(second=0) - timedelta(minutes=m),
+                "meta": {"farm": "BL-01", "pond": "BL-01-A1", "gateway": "g"},
+                "do_avg": 5.0 - m / 100,
+                "do_min": 4.9,
+                "do_max": 5.1,
+            }
+            for m in (300, 200, 100)
+        ]
+    )
+    rows = (await client.get("/v1/ponds/BL-01-A1/history?minutes=600")).json()
+    assert [r["do"] for r in rows] == [2.0, 3.0, 4.0] and rows[0]["ts"] < rows[-1]["ts"]
     assert (await client.get("/v1/ponds/nope")).status_code == 404
     assert (await client.get("/v1/meta")).json()["farm_clock_offset_hours"] == 7.0
 

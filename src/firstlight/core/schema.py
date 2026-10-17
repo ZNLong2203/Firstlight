@@ -62,10 +62,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("meta.pond", ASCENDING), ("ts", DESCENDING)], name="pond_ts"),
         IndexModel([("meta.gateway", ASCENDING), ("ts", DESCENDING)], name="gateway_ts"),
     ],
-    "readings_1m": [
-        IndexModel([("_id.pond", ASCENDING), ("_id.minute", DESCENDING)], name="pond_minute"),
-        IndexModel([("minute", ASCENDING)], name="ttl_180d", expireAfterSeconds=180 * DAY),
-    ],
+    "readings_1m": [IndexModel([("meta.pond", ASCENDING), ("minute", ASCENDING)], name="pond_minute")],
     "readings_1h": [IndexModel([("_id.pond", ASCENDING), ("_id.hour", DESCENDING)], name="pond_hour")],
     "pond_state": [
         IndexModel([("farm", ASCENDING)], name="farm"),
@@ -102,16 +99,32 @@ INDEXES: dict[str, list[IndexModel]] = {
 }
 
 
+# One document per pond per tick, and one per pond per minute; meta holds only stable identifiers.
+TIME_SERIES: dict[str, dict[str, Any]] = {
+    "readings": {
+        "timeseries": {"timeField": "ts", "metaField": "meta", "granularity": "seconds"},
+        "expireAfterSeconds": 14 * DAY,
+    },
+    "readings_1m": {
+        "timeseries": {"timeField": "minute", "metaField": "meta", "granularity": "minutes"},
+        "expireAfterSeconds": 180 * DAY,
+    },
+}
+
+
 async def ensure_schema(db: AsyncDatabase[dict[str, Any]]) -> None:
     existing = set(await db.list_collection_names())
 
-    if "readings" not in existing:
-        # One document per pond per tick; meta holds only stable identifiers.
-        await db.create_collection(
-            "readings",
-            timeseries={"timeField": "ts", "metaField": "meta", "granularity": "seconds"},
-            expireAfterSeconds=14 * DAY,
-        )
+    # The minute rollups used to be a regular collection, which took 149 bytes a row on disk.
+    # They are derived data: the brain rebuilds them from the raw readings it still keeps.
+    rollups = await (await db.list_collections(filter={"name": "readings_1m"})).to_list()
+    if rollups and rollups[0].get("type") != "timeseries":
+        await db.drop_collection("readings_1m")
+        existing.discard("readings_1m")
+
+    for name, options in TIME_SERIES.items():
+        if name not in existing:
+            await db.create_collection(name, **options)
 
     if "devices" not in existing:
         await db.create_collection("devices", validator=DEVICE_VALIDATOR, validationLevel="strict")
@@ -119,7 +132,7 @@ async def ensure_schema(db: AsyncDatabase[dict[str, Any]]) -> None:
         await db.command("collMod", "devices", validator=DEVICE_VALIDATOR, validationLevel="strict")
 
     for name in INDEXES:
-        if name not in existing and name not in ("readings", "devices"):
+        if name not in existing and name not in (*TIME_SERIES, "devices"):
             await db.create_collection(name)
     for name in ("stream_state", "counters"):
         if name not in existing:

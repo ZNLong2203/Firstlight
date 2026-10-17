@@ -45,12 +45,7 @@ async def test_the_dawn_report_counts_the_night_once(api: tuple[httpx.AsyncClien
         ]
     )
     minutes = [
-        {
-            "_id": {"pond": pond, "minute": middle + timedelta(minutes=m)},
-            "farm": pond[:5],
-            "minute": middle + timedelta(minutes=m),
-            "do_min": do,
-        }
+        {"minute": middle + timedelta(minutes=m), "meta": {"pond": pond, "farm": pond[:5]}, "do_min": do}
         for pond, do in (("BL-01-A3", 3.8), ("ST-01-A2", 4.9))
         for m in range(10)
     ]

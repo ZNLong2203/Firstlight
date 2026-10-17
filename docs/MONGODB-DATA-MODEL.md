@@ -13,7 +13,7 @@
 | Exactly-once handling of retries | `ingest_batches`, `alerts` with unique indexes | Time series collections cannot carry a unique index. |
 | Validation of device documents | `devices` with `$jsonSchema` | Time series collections do not support schema validation. |
 | Searching past incidents by meaning | `incidents` with Atlas Vector Search and Atlas Search | Search indexes cannot be built on time series collections. |
-| Cheap long-term history | `readings_1m`, `readings_1h`, built with `$merge` | `$merge` cannot write into a time series collection; rollups are regular collections with their own TTL. |
+| Cheap long-term history | `readings_1m`, a time series collection the brain inserts into; `readings_1h`, a regular collection built with `$merge` | `$merge` cannot write into a time series collection, so the brain writes the minute rollups itself. |
 
 The pond id (`BL-01-A3`) is the join key everywhere. It appears in `readings.meta.pond`, `pond_state._id`, `devices.pond`, `commands.pond` and `incidents.pond`, and as the `pond` tag on every Datadog metric, span and log.
 
@@ -138,7 +138,8 @@ On Atlas, automated embedding with Voyage AI can replace the Gemini step; the qu
 | `devices` | `type` (`do_probe`, `aerator`, `feeder`, `generator`, `gateway`), `pond`, `farm`, and type-specific fields such as `aerator.kw` or `probe.cleaned_at` | `$jsonSchema` with `oneOf` per type; `2dsphere` on farm location |
 | `alerts` | raw Datadog webhook: `alert_id`, `transition`, `monitor`, `pond`, `payload`, `received_at` | unique `{ alert_id: 1, transition: 1 }` |
 | `ingest_batches` | `_id` = batch id, `received_at` | TTL 1 day on `received_at` |
-| `readings_1m`, `readings_1h` | `_id { pond, minute or hour }`, `farm`, `do { avg, min, max }`, `temp`, `ph`, `n` | TTL 180 days on `minute`; no TTL on hourly |
+| `readings_1m` | time series: `minute`, `meta { pond, farm, gateway }`, `do_avg`, `do_min`, `do_max`, `temp`, `ph`, `n` | kept 180 days (`expireAfterSeconds`); `{ meta.pond, minute }` |
+| `readings_1h` | `_id { pond, hour }`, `farm`, `do_avg`, `do_min`, `do_max`, `safe_minutes`, `minutes` | kept indefinitely |
 | `playbooks` | `_id` = cause, `steps [ { action, target, risk } ]`, `then` (`verify`, `dismiss`, `monitor`, `escalate`) | unique on `cause`; defaults written once, edits kept |
 | `chaos` | the demo's ground truth: `kind`, `pond`, `gateway`, `farm`, `device`, `started_at`, `cleared_at` | `{ status: 1, started_at: -1 }` |
 | `events` | what a gateway did on its own (the failsafe), reported with its next batch | `_id` = batch id + index, so a retry adds nothing; TTL 30 days |
@@ -242,25 +243,32 @@ db.readings.aggregate([
 
 ### Rollups for the data lifecycle
 
+The minute rollups go into `readings_1m`, a time series collection like the readings themselves. `$merge` cannot write into one, so the brain runs the aggregation and inserts the rows:
+
 ```js
-db.readings.aggregate([
-  { $match: { ts: { $gte: minuteStart, $lt: minuteEnd } } },
+const rows = db.readings.aggregate([
+  { $match: { ts: { $gte: start, $lt: end } } },
   { $group: {
       _id: { pond: "$meta.pond", minute: { $dateTrunc: { date: "$ts", unit: "minute" } } },
-      farm: { $first: "$meta.farm" },
+      farm: { $first: "$meta.farm" }, gateway: { $first: "$meta.gateway" },
       do_avg: { $avg: "$do" }, do_min: { $min: "$do" }, do_max: { $max: "$do" },
       temp: { $avg: "$temp" }, ph: { $avg: "$ph" }, n: { $sum: 1 } } },
-  { $set: { minute: "$_id.minute" } },
-  { $merge: { into: "readings_1m", on: "_id", whenMatched: "replace", whenNotMatched: "insert" } }
-])
+  { $project: { _id: 0, minute: "$_id.minute",
+      meta: { pond: "$_id.pond", farm: "$farm", gateway: "$gateway" },
+      do_avg: 1, do_min: 1, do_max: 1, temp: 1, ph: 1, n: 1 } }
+]).toArray()
+db.readings_1m.insertMany(rows, { ordered: false })
 ```
 
-### Have we seen this before? (planned)
+`start` is the minute after the newest row already stored, or the first reading after it, so a stretch without data is skipped. `end` is the last complete minute, at most an hour later. A brain that was down therefore catches up an hour per cycle instead of leaving a hole, and nothing is rolled up twice. The hourly rollups are small enough for a regular collection, so they use `$merge` from `readings_1m` into `readings_1h`.
+
+### Have we seen this before?
 
 Hybrid search: vector similarity and keyword relevance, merged with Reciprocal Rank Fusion. `$rankFusion` is not enabled on 8.0, so the fusion is written with `$unionWith`, which runs on any 8.0 deployment:
 
 ```js
 const k = 60                      // RRF constant
+const closed = ["resolved", "dismissed"]
 const rank = [                    // turn a ranked list into 1 / (k + rank)
   { $group: { _id: null, ids: { $push: "$_id" } } },
   { $unwind: { path: "$ids", includeArrayIndex: "r" } },
@@ -268,10 +276,12 @@ const rank = [                    // turn a ranked list into 1 / (k + rank)
 ]
 db.incidents.aggregate([
   { $vectorSearch: { index: "incident_vectors", path: "embedding", queryVector: qv,
-                     numCandidates: 100, limit: 10, filter: { status: "resolved" } } },
+                     numCandidates: 100, limit: 10, filter: { status: { $in: closed } } } },
+  { $match: { _id: { $ne: openId } } },
   ...rank,
   { $unionWith: { coll: "incidents", pipeline: [
-      { $search: { index: "incident_text", text: { query: q, path: ["summary", "postmortem_md"] } } },
+      { $search: { index: "incident_text", text: { query: q, path: "memory_text" } } },
+      { $match: { status: { $in: closed }, _id: { $ne: openId } } },
       { $limit: 10 }, ...rank ] } },
   { $group: { _id: "$_id", score: { $sum: "$score" } } },
   { $sort: { score: -1 } }, { $limit: 3 },
@@ -280,7 +290,7 @@ db.incidents.aggregate([
 ])
 ```
 
-`qv` is the Gemini embedding of the open incident's evidence summary, and `q` is the same text.
+Every incident gets a `memory_text` once it closes: a few plain sentences on its scope, signals, cause, evidence, actions and outcome, plus the investigator's summary. That text is embedded with `gemini-embedding-2` at 768 dimensions and stored next to it. When a new incident opens, `q` is its own text and `qv` that text's embedding. `incident_vectors` (vector index, cosine, filters on `status` and `diagnosis.cause`) and `incident_text` (Atlas Search on `memory_text`) are created by the brain at start. The three incidents found go to the investigator and to the console's incident drawer.
 
 ## Change streams
 
@@ -304,7 +314,7 @@ Measured on the demo host on 17/10/2026 with `scripts/measure.py`, which only re
 | Storage of raw readings | 1.45 million readings in 4,200 buckets, about 346 per bucket. Each reading is 403 bytes as a document and 6.8 bytes on disk: 9.4 MB of data and 3.1 MB of indexes. Kept 14 days, that is 1.1 MB per pond. |
 | Storage of one-minute rollups | 127,000 rows in a regular collection: 149 bytes each on disk, of which the indexes are more than half (`_id`, `pond_minute` and the TTL index). Kept 180 days, that is 36.8 MB per pond. Per minute of a pond's history, a rollup row takes 3.5 times the space of the six readings it summarises. |
 
-The rollups are the part that does not scale: at 2,000 ponds they would need about 74 GB, more than the demo host's 35 GB disk. A rollup row compressed like a reading would take roughly a tenth of the space, so the next step is to write the rollups into a time series collection as well. `$merge` cannot target one, so the brain inserts each minute's rows itself.
+Kept like that, the rollups were the part that did not scale: at 2,000 ponds they would have needed about 74 GB, more than the demo host's 35 GB disk. Now they are a time series collection too, written by the brain as described above. The space they take now will be measured once a few days of rows exist.
 
 Still to measure:
 - sustained ingest at ten times the demo's farms (`scripts/loadtest.sh`);
