@@ -64,3 +64,15 @@ async def test_the_dawn_report_counts_the_night_once(api: tuple[httpx.AsyncClien
     assert latest["estate"]["date"] == date and [f["farm"] for f in latest["farms"]] == ["BL-01", "ST-01"]
     run = await client.post("/v1/reports/run", headers={"X-Demo-Code": DEMO_CODE})
     assert run.status_code == 200 and run.json()["estate"]["farm"] == "*"
+
+
+async def test_the_dawn_report_waits_for_the_minute_rollups(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """After a restart the brain catches up on its rollups; a report written before that would be partial."""
+    _, db = api
+    now = datetime(2026, 10, 17, 1, 0, tzinfo=UTC)  # 08:00 in Vietnam
+    _, end, date = last_night(now, 7)
+    assert await dawn_report_due(db, now, 7) is None
+    meta = {"pond": "BL-01-A3", "farm": "BL-01"}
+    await db.readings_1m.insert_one({"minute": end, "meta": meta, "do_min": 5.0})
+    reports = await dawn_report_due(db, now, 7)
+    assert reports is not None and reports[0]["_id"] == f"*:{date}"

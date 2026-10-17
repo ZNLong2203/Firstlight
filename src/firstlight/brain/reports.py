@@ -141,8 +141,11 @@ async def build(db: AsyncDatabase[Doc], start: datetime, end: datetime, date: st
 
 
 async def dawn_report_due(db: AsyncDatabase[Doc], now: datetime, offset_hours: float) -> list[Doc] | None:
-    """Build last night's report once, a few minutes after dawn on the farm clock."""
+    """Build last night's report once, a few minutes after dawn on the farm clock, and only once the
+    minute rollups reach the end of the night: a brain that has just restarted is still catching up."""
     start, end, date = last_night(now, offset_hours)
     if now < end + READY_AFTER or await db.reports.find_one({"_id": f"*:{date}"}, {"_id": 1}):
+        return None
+    if not await db.readings_1m.find_one({"minute": {"$gte": end - timedelta(minutes=1)}}, {"_id": 1}):
         return None
     return await build(db, start, end, date)
