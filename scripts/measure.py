@@ -99,6 +99,25 @@ for key in ("numBytesUncompressed", "numBytesCompressed", "numCompressedBuckets"
     if key in series:
         print(f"  timeseries.{key}: {series[key]:,}")
 
+# What each collection costs on disk per document, and what the retention windows add up to per pond.
+print("collection        docs        on disk   per doc   indexes")
+existing = set(db.list_collection_names())
+for name in ("readings_1m", "readings_1h", "pond_state", "incidents", "commands", "events", "ingest_batches"):
+    if name not in existing:
+        continue
+    c = db.command("collStats", name)
+    per_doc = (c["storageSize"] + c["totalIndexSize"]) / max(c["count"], 1)
+    print(
+        f"{name:<16}{c['count']:>10,}{c['storageSize'] / MB:>10.1f} MB{per_doc:>8.0f} B"
+        f"{c['totalIndexSize'] / MB:>8.1f} MB"
+    )
+per_reading = (stats["storageSize"] + stats["totalIndexSize"]) / max(count, 1)
+minute = db.command("collStats", "readings_1m")
+per_minute = (minute["storageSize"] + minute["totalIndexSize"]) / max(minute["count"], 1)
+raw_mb = 6 * 60 * 24 * 14 * per_reading / MB  # a reading every 10 s, kept 14 days
+rollup_mb = 60 * 24 * 180 * per_minute / MB  # a rollup a minute, kept 180 days
+print(f"per pond at full retention: raw readings {raw_mb:.1f} MB, one-minute rollups {rollup_mb:.1f} MB")
+
 if "--compare" in sys.argv:
     hour = now - timedelta(hours=1)
     scratch = client[SCRATCH]

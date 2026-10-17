@@ -301,7 +301,10 @@ Measured on the demo host on 17/10/2026 with `scripts/measure.py`, which only re
 | Forecast for 200 ponds, 14,400 readings in the window | median 345 ms; 671 ms with the third window stage |
 | The forecast's plan | `CLUSTERED_IXSCAN` over the buckets: 200 buckets read for 200 ponds, because each pond's last 12 minutes sit in its current one-hour bucket |
 | Evidence window, one pond, 15 minutes | median 4 ms |
-| Storage | 1.45 million readings in 4,200 buckets, about 346 per bucket. Each reading is 403 bytes as a document and 6.8 bytes on disk: 9.4 MB of data and 3.1 MB of indexes. |
+| Storage of raw readings | 1.45 million readings in 4,200 buckets, about 346 per bucket. Each reading is 403 bytes as a document and 6.8 bytes on disk: 9.4 MB of data and 3.1 MB of indexes. Kept 14 days, that is 1.1 MB per pond. |
+| Storage of one-minute rollups | 127,000 rows in a regular collection: 149 bytes each on disk, of which the indexes are more than half (`_id`, `pond_minute` and the TTL index). Kept 180 days, that is 36.8 MB per pond. Per minute of a pond's history, a rollup row takes 3.5 times the space of the six readings it summarises. |
+
+The rollups are the part that does not scale: at 2,000 ponds they would need about 74 GB, more than the demo host's 35 GB disk. A rollup row compressed like a reading would take roughly a tenth of the space, so the next step is to write the rollups into a time series collection as well. `$merge` cannot target one, so the brain inserts each minute's rows itself.
 
 Still to measure:
 - sustained ingest at ten times the demo's farms (`scripts/loadtest.sh`);
