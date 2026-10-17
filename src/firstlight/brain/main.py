@@ -53,6 +53,7 @@ async def forecast_once(db: AsyncDatabase[dict[str, Any]], metrics: Metrics, now
                             "minutes_to_hypoxia": None if minutes is None else round(minutes, 1),
                             "slope_per_min": round(f.get("slope_per_min", 0.0), 4),
                             "points": f.get("points", 0),
+                            "rate_3m": round(f.get("rate_3m") or 0.0, 3),
                         },
                     }
                 },

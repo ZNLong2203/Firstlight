@@ -205,8 +205,10 @@ def test_problems_are_grouped_by_their_likely_cause() -> None:
     states = [state(f"A-0{i}", "A", "GW-A", stale) for i in range(4)]  # a silent gateway
     states += [state(f"B-0{i}", "B", "GW-B", fresh, running=0) for i in range(4)]  # a dark farm
     states += [state("C-01", "C", "GW-C", fresh, running=2), state("C-02", "C", "GW-C", fresh)]
+    states.append({**state("C-03", "C", "GW-C", fresh), "forecast": {"rate_3m": -0.5}})  # falls too fast
     problems = {p.key: p for p in find_problems(states, set(), now)}
-    assert set(problems) == {"GW-A", "B", "C-01"}
+    assert set(problems) == {"GW-A", "B", "C-01", "C-03"}
+    assert problems["C-03"].signals == ["fast_drop"]
     assert (problems["GW-A"].scope, problems["B"].scope, problems["C-01"].signals) == (
         "gateway",
         "farm",

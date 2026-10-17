@@ -50,6 +50,10 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                     "sd_t": {"$stdDevPop": "$t", "window": cumulative},
                     "n": {"$count": {}, "window": cumulative},
                     "do_1m": {"$avg": "$do", "window": {"range": [-60, 0], "unit": "second"}},
+                    "rate_3m": {
+                        "$derivative": {"input": "$do", "unit": "minute"},
+                        "window": {"range": [-180, 0], "unit": "second"},
+                    },
                 },
             }
         },
@@ -59,7 +63,14 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                 "last": {
                     "$top": {
                         "sortBy": {"ts": -1},
-                        "output": {"ts": "$ts", "do": "$do_1m", "cov": "$cov", "sd_t": "$sd_t", "n": "$n"},
+                        "output": {
+                            "ts": "$ts",
+                            "do": "$do_1m",
+                            "cov": "$cov",
+                            "sd_t": "$sd_t",
+                            "n": "$n",
+                            "rate_3m": "$rate_3m",
+                        },
                     }
                 },
             }
@@ -103,6 +114,7 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                 "slope_per_min": 1,
                 "minutes_to_hypoxia": 1,
                 "points": "$last.n",
+                "rate_3m": "$last.rate_3m",
             }
         },
     ]

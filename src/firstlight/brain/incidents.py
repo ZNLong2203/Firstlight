@@ -40,6 +40,7 @@ Db = AsyncDatabase[Doc]
 STALE_S = 60
 FRESH_S = 30
 RISK_MINUTES = 30
+FAST_DROP = -0.1  # mg/L per minute over 3 min: twice what a pond loses with its main aerator gone
 CONFIDENT = 0.5
 INVESTIGATE_FOR = timedelta(seconds=90)
 ACK_TIMEOUT = timedelta(seconds=15)
@@ -128,6 +129,8 @@ def find_problems(states: list[Doc], covered: set[str], now: datetime) -> list[P
                     signals.append("hypoxia_risk")
                 if last.get("probe_q", 1.0) < 0.8:
                     signals.append("probe_degraded")
+                if ((state.get("forecast") or {}).get("rate_3m") or 0.0) < FAST_DROP:
+                    signals.append("fast_drop")
         if signals:
             pond = state["_id"]
             problems.append(Problem(pond, "pond", state.get("farm"), state.get("gateway"), [pond], signals))
@@ -448,6 +451,8 @@ async def resolve(db: Db, incident: Doc, now: datetime, metrics: Metrics, extra:
             "oxygen_debt": round(stats[0]["oxygen_debt"] or 0.0, 2),
             "below_safe_min": round(stats[0]["below_safe"] / 6, 1),
         }
+    if extra and "gap" in extra:
+        result |= {"blind_s": extra["gap"]["blind_s"], "coverage": extra["gap"].get("coverage")}
     cause = (incident.get("diagnosis") or {}).get("cause", "unknown")
     entry = {"t": now, "kind": "resolved", "detail": result, **(extra or {})}
     await _close(db, incident, "resolved", now, {"metrics": result}, entry)

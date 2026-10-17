@@ -124,3 +124,4 @@ async def test_forecast_restarts_when_an_aerator_stops(api: tuple[httpx.AsyncCli
     result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
     assert result[0]["slope_per_min"] == pytest.approx(-0.05, rel=0.05)
     assert result[0]["points"] == 12 and 30 < result[0]["minutes_to_hypoxia"] < 45
+    assert result[0]["rate_3m"] == pytest.approx(-0.05, rel=0.1)
