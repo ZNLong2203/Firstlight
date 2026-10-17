@@ -53,7 +53,7 @@ async def ai_stats(request: Request) -> dict[str, Any]:
 @router.get("/{incident_id}")
 async def incident(incident_id: str, request: Request) -> dict[str, Any]:
     db = request.app.state.db
-    doc = await db.incidents.find_one({"_id": incident_id})
+    doc = await db.incidents.find_one({"_id": incident_id}, {"embedding": 0})
     if doc is None:
         raise HTTPException(status_code=404, detail="no such incident")
     commands = (

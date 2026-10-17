@@ -14,7 +14,7 @@ from ddtrace.llmobs import LLMObs
 from pymongo import ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
-from firstlight.ai import evals
+from firstlight.ai import evals, memory
 from firstlight.ai.gemini import Gemini
 from firstlight.ai.investigator import investigate, postmortem
 from firstlight.core.metrics import Metrics
@@ -78,9 +78,47 @@ class AiWorker:
         )
         if closed:
             self._start(self._postmortem(closed))
+            return
+        # Incidents that closed before they could be remembered join the memory one at a time.
+        forgotten = await self.db.incidents.find_one(
+            {
+                "open": {"$exists": False},
+                "embedding": {"$exists": False},
+                "postmortem.status": {"$in": ["done", "failed"]},
+            },
+            sort=[("closed_at", -1)],
+        )
+        if forgotten:
+            self._start(self._remember(forgotten))
+
+    async def _recall(self, incident: Doc) -> list[Doc]:
+        """The closest past incidents, for the investigator to read and the console to show."""
+        try:
+            text = memory.memory_text(incident)
+            found = await memory.similar(
+                self.db, await memory.embed_query(self.gemini, text), text, incident["_id"]
+            )
+        except Exception:
+            log.exception("incident memory lookup failed", extra={"ctx": {"incident": incident["_id"]}})
+            return []
+        await self.db.incidents.update_one({"_id": incident["_id"]}, {"$set": {"similar": found}})
+        return found
+
+    async def _remember(self, incident: Doc) -> None:
+        """A closed incident joins the memory: its text and its embedding."""
+        text = memory.memory_text(incident)
+        try:
+            vector = await memory.embed_document(self.gemini, text)
+        except Exception:
+            log.exception("incident embedding failed", extra={"ctx": {"incident": incident["_id"]}})
+            return
+        await self.db.incidents.update_one(
+            {"_id": incident["_id"]}, {"$set": {"memory_text": text, "embedding": vector}}
+        )
 
     async def _investigate(self, incident: Doc) -> None:
         async with self._slot:
+            incident = {**incident, "similar": await self._recall(incident)}
             try:
                 result = await asyncio.wait_for(investigate(self.gemini, self.db, incident), TIMEOUT_S)
             except Exception as exc:
@@ -135,6 +173,7 @@ class AiWorker:
             if scores:
                 update |= {f"evals.{k}": v for k, v in scores.items()}
             await self.db.incidents.update_one({"_id": incident["_id"]}, {"$set": update})
+            await self._remember(incident)
             if scores:
                 self._submit(
                     (incident.get("investigation") or {}).get("span"), {"rca_correct": scores["rca_correct"]}

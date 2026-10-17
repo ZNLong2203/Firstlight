@@ -108,7 +108,7 @@ async def watch(db: AsyncDatabase[dict[str, Any]], collection: str, hub: Hub, ki
     """A collection's change stream → hub. Restarts from the last resume token after any error."""
     token: Any = None
     pipeline = [{"$match": {"operationType": {"$in": ["insert", "update", "replace"]}}}]
-    shape = project if kind == "ponds" else plain
+    shape = project if kind == "ponds" else public_incident
     while True:
         try:
             async with await db[collection].watch(
@@ -125,11 +125,17 @@ async def watch(db: AsyncDatabase[dict[str, Any]], collection: str, hub: Hub, ki
             await asyncio.sleep(2)
 
 
+def public_incident(doc: dict[str, Any]) -> dict[str, Any]:
+    """An incident for the console: everything but its 768-number embedding."""
+    shown: dict[str, Any] = plain({k: v for k, v in doc.items() if k != "embedding"})
+    return shown
+
+
 async def recent_incidents(db: AsyncDatabase[dict[str, Any]]) -> list[dict[str, Any]]:
     """Every open incident, then the most recently closed ones."""
-    opened = await db.incidents.find({"open": True}).sort("opened_at", -1).to_list()
+    opened = await db.incidents.find({"open": True}, {"embedding": 0}).sort("opened_at", -1).to_list()
     closed = (
-        await db.incidents.find({"open": {"$exists": False}})
+        await db.incidents.find({"open": {"$exists": False}}, {"embedding": 0})
         .sort("closed_at", -1)
         .limit(RECENT_INCIDENTS)
         .to_list()

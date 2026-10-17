@@ -10,6 +10,7 @@ from pymongo import UpdateOne
 from pymongo.asynchronous.database import AsyncDatabase
 
 from firstlight.ai.gemini import Gemini
+from firstlight.ai.memory import ensure_search_indexes
 from firstlight.brain.ai_worker import AiWorker
 from firstlight.brain.forecast import classify, forecast_pipeline
 from firstlight.brain.incidents import Policy, incident_cycle
@@ -101,7 +102,10 @@ async def run() -> None:
     )
     log.info("brain started", extra={"ctx": {"env": settings.dd_env, "every_s": CYCLE_S}})
     await ensure_playbooks(db)
-    ai = AiWorker(db, Gemini(settings), metrics)
+    gemini = Gemini(settings)
+    if gemini.enabled:
+        await ensure_search_indexes(db)
+    ai = AiWorker(db, gemini, metrics)
     done: dict[str, datetime] = {}
     loop = asyncio.get_running_loop()
     cycles = 0

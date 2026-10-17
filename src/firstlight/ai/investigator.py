@@ -104,6 +104,7 @@ BRIEF_FIELDS = (
     "actions",
     "approvals",
     "metrics",
+    "similar",
 )
 
 
