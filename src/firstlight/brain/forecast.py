@@ -14,15 +14,20 @@ QUALITY_JUMP = 0.2
 
 
 def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
-    """Least-squares slope of DO per pond: slope = cov(t, DO) / var(t), computed with window functions.
+    """Least-squares slope of DO per pond, slope = cov(t, DO) / var(t), for every pond in one pass.
 
     The fit only uses readings since the pond's setup last changed: the number of turning aerators,
     or a jump in the probe's signal quality. When an aerator stops, a standby starts, or a fouled
     probe is cleaned, the old readings no longer describe the pond, so the regression starts again
     instead of mixing two regimes for the next twelve minutes. Quality that drifts down as biofilm
     grows is not a jump, so the rate of change stays measurable while a probe fouls.
+
+    Two window stages number the regimes ($shift, then a running $sum). The regression itself is a
+    $group of running sums per pond and regime: a third window stage would sort every reading again,
+    and measured on 200 ponds it cost as much as the rest of the pipeline together.
     """
     cumulative = {"documents": ["unbounded", "current"]}
+    whole = {"documents": ["unbounded", "unbounded"]}
     by_pond = {"partitionBy": "$meta.pond", "sortBy": {"ts": 1}}
     turning = {
         "$size": {
@@ -46,9 +51,23 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
             0,
         ]
     }
+    age_ms = {"$subtract": ["$newest_ts", "$ts"]}  # how long before the pond's newest reading
+    in_1m = {"$lte": [age_ms, 60_000]}
+    in_3m = {"$lte": [age_ms, 180_000]}
+    point = {"t": "$t", "do": "$do"}
+    fit = "$fit"
+    n = f"{fit}.n"
+    mean_t = {"$divide": [f"{fit}.st", n]}
+    var_t = {"$subtract": [{"$divide": [f"{fit}.stt", n]}, {"$multiply": [mean_t, mean_t]}]}
+    cov = {
+        "$subtract": [
+            {"$divide": [f"{fit}.sty", n]},
+            {"$multiply": [mean_t, {"$divide": [f"{fit}.sy", n]}]},
+        ]
+    }
     return [
         {"$match": {"ts": {"$gte": since}}},
-        {"$set": {"t": {"$toLong": "$ts"}, "turning": turning, "q": {"$ifNull": ["$probe.q", 1.0]}}},
+        {"$set": {"turning": turning, "q": {"$ifNull": ["$probe.q", 1.0]}}},
         {
             "$setWindowFields": {
                 **by_pond,
@@ -58,49 +77,39 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                 },
             }
         },
-        {"$setWindowFields": {**by_pond, "output": {"regime": {"$sum": changed, "window": cumulative}}}},
         {
             "$setWindowFields": {
-                "partitionBy": {"pond": "$meta.pond", "regime": "$regime"},
-                "sortBy": {"ts": 1},
+                **by_pond,
                 "output": {
-                    "cov": {"$covariancePop": ["$t", "$do"], "window": cumulative},
-                    "sd_t": {"$stdDevPop": "$t", "window": cumulative},
-                    "n": {"$count": {}, "window": cumulative},
-                    "do_1m": {"$avg": "$do", "window": {"range": [-60, 0], "unit": "second"}},
-                    "rate_3m": {
-                        "$derivative": {"input": "$do", "unit": "minute"},
-                        "window": {"range": [-180, 0], "unit": "second"},
-                    },
-                    "n_3m": {"$count": {}, "window": {"range": [-180, 0], "unit": "second"}},
+                    "regime": {"$sum": changed, "window": cumulative},
+                    "newest_ts": {"$max": "$ts", "window": whole},
                 },
             }
         },
+        # Minutes since the window opened: small numbers keep the sums of squares exact.
+        {"$set": {"t": {"$divide": [{"$subtract": ["$ts", since]}, 60_000]}}},
         {
             "$group": {
-                "_id": "$meta.pond",
-                "last": {
-                    "$top": {
-                        "sortBy": {"ts": -1},
-                        "output": {
-                            "ts": "$ts",
-                            "do": "$do_1m",
-                            "cov": "$cov",
-                            "sd_t": "$sd_t",
-                            "n": "$n",
-                            "rate_3m": "$rate_3m",
-                            "n_3m": "$n_3m",
-                        },
-                    }
-                },
+                "_id": {"pond": "$meta.pond", "regime": "$regime"},
+                "n": {"$sum": 1},
+                "st": {"$sum": "$t"},
+                "sy": {"$sum": "$do"},
+                "stt": {"$sum": {"$multiply": ["$t", "$t"]}},
+                "sty": {"$sum": {"$multiply": ["$t", "$do"]}},
+                "do_1m": {"$avg": {"$cond": [in_1m, "$do", None]}},
+                "n_3m": {"$sum": {"$cond": [in_3m, 1, 0]}},
+                "first_3m": {"$min": {"$cond": [in_3m, point, None]}},  # $min skips the nulls
+                "newest": {"$max": point},
             }
         },
+        # The pond's current regime is its highest-numbered one.
+        {"$group": {"_id": "$_id.pond", "fit": {"$top": {"sortBy": {"_id.regime": -1}, "output": "$$ROOT"}}}},
         {
             "$set": {
                 "slope_per_min": {
                     "$cond": [
-                        {"$and": [{"$gt": ["$last.sd_t", 0]}, {"$gte": ["$last.n", MIN_POINTS]}]},
-                        {"$multiply": [{"$divide": ["$last.cov", {"$pow": ["$last.sd_t", 2]}]}, 60_000]},
+                        {"$and": [{"$gt": [var_t, 0]}, {"$gte": [n, MIN_POINTS]}]},
+                        {"$divide": [cov, var_t]},
                         0,
                     ]
                 }
@@ -111,12 +120,12 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
                 "minutes_to_hypoxia": {
                     "$switch": {
                         "branches": [
-                            {"case": {"$lte": ["$last.do", HYPOXIA_MGL]}, "then": 0},
+                            {"case": {"$lte": ["$fit.do_1m", HYPOXIA_MGL]}, "then": 0},
                             {
                                 "case": {"$lt": ["$slope_per_min", FALLING]},
                                 "then": {
                                     "$divide": [
-                                        {"$subtract": ["$last.do", HYPOXIA_MGL]},
+                                        {"$subtract": ["$fit.do_1m", HYPOXIA_MGL]},
                                         {"$multiply": ["$slope_per_min", -1]},
                                     ]
                                 },
@@ -130,11 +139,23 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
         {
             "$project": {
                 "_id": 1,
-                "do": "$last.do",
+                "do": "$fit.do_1m",
                 "slope_per_min": 1,
                 "minutes_to_hypoxia": 1,
-                "points": "$last.n",
-                "rate_3m": {"$cond": [{"$gte": ["$last.n_3m", RATE_POINTS]}, "$last.rate_3m", None]},
+                "points": n,
+                # The same as $derivative over the last three minutes: first and last reading.
+                "rate_3m": {
+                    "$cond": [
+                        {"$gte": ["$fit.n_3m", RATE_POINTS]},
+                        {
+                            "$divide": [
+                                {"$subtract": ["$fit.newest.do", "$fit.first_3m.do"]},
+                                {"$subtract": ["$fit.newest.t", "$fit.first_3m.t"]},
+                            ]
+                        },
+                        None,
+                    ]
+                },
             }
         },
     ]

@@ -151,36 +151,42 @@ Each pipeline answers one operational question.
 
 ### How many minutes until this pond runs out of oxygen?
 
-Least-squares slope of DO over the last 12 minutes, for all 200 ponds in one pass every 10 s. The fit only uses readings since the number of turning aerators last changed: when an aerator stops, or the standby starts, the old trend no longer describes the pond. `$shift` compares each reading with the one before, a running `$sum` numbers the regimes, and the regression is partitioned by pond and regime:
+Least-squares slope of DO over the last 12 minutes, for every pond in one aggregation every 10 s. The fit only uses readings since the pond's setup last changed. That means a change in the number of turning aerators, or a jump of 0.2 or more in the probe's signal quality: when an aerator stops, the standby starts or a fouled probe is cleaned, the old trend no longer describes the pond. The pipeline works like this:
+
+1. `$shift` compares each reading with the one before.
+2. A running `$sum` numbers the regimes.
+3. A `$group` keeps the running sums of the regression for each pond and regime.
 
 ```js
-const all = { documents: ["unbounded", "current"] }
+const all = { documents: ["unbounded", "current"] }, whole = { documents: ["unbounded", "unbounded"] }
+const byPond = { partitionBy: "$meta.pond", sortBy: { ts: 1 } }
 db.readings.aggregate([
-  { $match: { ts: { $gte: new Date(Date.now() - 12 * 60 * 1000) } } },
-  { $set: { t: { $toLong: "$ts" },
-            turning: { $size: { $filter: { input: "$aer", cond: { $gte: ["$$this.amp", 0.5] } } } } } },
-  { $setWindowFields: { partitionBy: "$meta.pond", sortBy: { ts: 1 },
-      output: { previous: { $shift: { output: "$turning", by: -1 } } } } },
-  { $setWindowFields: { partitionBy: "$meta.pond", sortBy: { ts: 1 },
-      output: { regime: { $sum: { $cond: [ { $and: [ { $ne: ["$previous", null] },
-                                                     { $ne: ["$previous", "$turning"] } ] }, 1, 0 ] },
-                          window: all } } } },
-  { $setWindowFields: { partitionBy: { pond: "$meta.pond", regime: "$regime" }, sortBy: { ts: 1 },
-      output: { cov:   { $covariancePop: ["$t", "$do"], window: all },
-                sd_t:  { $stdDevPop: "$t", window: all },
-                n:     { $count: {}, window: all },
-                do_1m: { $avg: "$do", window: { range: [-60, 0], unit: "second" } } } } },
-  { $group: { _id: "$meta.pond",
-      last: { $top: { sortBy: { ts: -1 }, output: { do: "$do_1m", cov: "$cov", sd_t: "$sd_t", n: "$n" } } } } },
-  { $set: { slope_per_min: { $cond: [ { $gte: ["$last.n", 9] },
-      { $multiply: [ { $divide: ["$last.cov", { $pow: ["$last.sd_t", 2] }] }, 60000 ] }, 0 ] } } },
-  { $set: { minutes_to_hypoxia: { $switch: { branches: [
-      { case: { $lte: ["$last.do", 3.0] }, then: 0 },
-      { case: { $lt: ["$slope_per_min", -0.005] },
-        then: { $divide: [ { $subtract: ["$last.do", 3.0] }, { $multiply: ["$slope_per_min", -1] } ] } } ],
-      default: null } } } }
+  { $match: { ts: { $gte: since } } },
+  { $set: { turning: { $size: { $filter: { input: "$aer", cond: { $gte: ["$$this.amp", 0.5] } } } },
+            q: { $ifNull: ["$probe.q", 1] } } },
+  { $setWindowFields: { ...byPond, output: {
+      prev_turning: { $shift: { output: "$turning", by: -1 } },
+      prev_q:       { $shift: { output: "$q", by: -1 } } } } },
+  { $setWindowFields: { ...byPond, output: {
+      regime: { $sum: { $cond: [ { $and: [ { $ne: ["$prev_turning", null] }, { $or: [
+                  { $ne: ["$prev_turning", "$turning"] },
+                  { $gte: [ { $abs: { $subtract: ["$q", "$prev_q"] } }, 0.2 ] } ] } ] }, 1, 0 ] },
+                window: all },
+      newest_ts: { $max: "$ts", window: whole } } } },
+  { $set: { t: { $divide: [ { $subtract: ["$ts", since] }, 60000 ] } } },   // minutes: small numbers
+  { $group: { _id: { pond: "$meta.pond", regime: "$regime" },
+      n: { $sum: 1 }, st: { $sum: "$t" }, sy: { $sum: "$do" },
+      stt: { $sum: { $multiply: ["$t", "$t"] } }, sty: { $sum: { $multiply: ["$t", "$do"] } },
+      do_1m: { $avg: { $cond: [ { $lte: [ { $subtract: ["$newest_ts", "$ts"] }, 60000 ] }, "$do", null ] } } } },
+  { $group: { _id: "$_id.pond", fit: { $top: { sortBy: { "_id.regime": -1 }, output: "$$ROOT" } } } },
+  // slope = (sty/n - st/n * sy/n) / (stt/n - (st/n)^2), in mg/L per minute, once n >= 9
+  // minutes_to_hypoxia = (do_1m - 3) / -slope while the slope is below -0.005
 ])
 ```
+
+The same `$group` also keeps the first and newest reading of the last three minutes. Their difference is `rate_3m`, the value `$derivative` would give, and it is published once the window holds 12 readings.
+
+The first version fitted the line with a third `$setWindowFields` stage, using `$covariancePop` and `$stdDevPop` over the regime partition. It was timed stage by stage on the demo's 200 ponds (14,400 readings in the window). That stage and the `$top` after it cost 384 of the 684 ms, because each window stage sorts and passes every reading again. Running sums in a `$group` give the same result for all 200 live ponds, and the median time drops from 671 ms to 345 ms.
 
 ### Pond, sensor or data path?
 
@@ -286,11 +292,17 @@ db.incidents.aggregate([
 
 The API opens one stream per collection and fans out in memory, so the number of streams does not grow with the number of consoles or gateways. After an error each stream resumes from its last token. Nothing is lost across an API restart either: a console starts from a fresh snapshot, and a gateway that connects receives every command it has not acknowledged.
 
-## Measurements to publish
+## Measurements
 
-These are filled in from the running system:
+Measured on the demo host on 17/10/2026 with `scripts/measure.py`, which only reads. The host has 2 vCPU and 8 GB and runs MongoDB 8.0.34 (atlas-local) next to the app.
 
-- readings per second sustained by `insert_many` batches;
-- `db.readings.stats().timeseries` compression compared with an equivalent regular collection;
-- `explain("executionStats")` for the forecast pipeline and the evidence queries, showing index use;
-- p95 latency of the forecast pipeline for 200 ponds.
+| What | Result |
+|---|---|
+| Forecast for 200 ponds, 14,400 readings in the window | median 345 ms; 671 ms with the third window stage |
+| The forecast's plan | `CLUSTERED_IXSCAN` over the buckets: 200 buckets read for 200 ponds, because each pond's last 12 minutes sit in its current one-hour bucket |
+| Evidence window, one pond, 15 minutes | median 4 ms |
+| Storage | 1.45 million readings in 4,200 buckets, about 346 per bucket. Each reading is 403 bytes as a document and 6.8 bytes on disk: 9.4 MB of data and 3.1 MB of indexes. |
+
+Still to measure:
+- sustained ingest at ten times the demo's farms (`scripts/loadtest.sh`);
+- the space the same readings take in a regular collection (`scripts/measure.py --compare`).
