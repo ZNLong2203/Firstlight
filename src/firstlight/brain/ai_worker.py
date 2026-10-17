@@ -22,7 +22,8 @@ from firstlight.core.metrics import Metrics
 log = logging.getLogger("firstlight.brain.ai")
 
 Doc = dict[str, Any]
-TIMEOUT_S = 90
+TIMEOUT_S = 180  # five model rounds through Vertex AI's global endpoint can take over a minute
+ATTEMPTS = 2
 STALE_CLAIM = timedelta(minutes=5)
 RECENT = timedelta(hours=6)  # older incidents are history, not work
 
@@ -46,11 +47,15 @@ class AiWorker:
             "$or": [
                 {"investigation": {"$exists": False}},
                 {"investigation.status": "running", "investigation.at": {"$lt": now - STALE_CLAIM}},
+                {"investigation.status": "failed", "investigation.attempts": {"$lt": ATTEMPTS}},
             ]
         }
         incident = await self.db.incidents.find_one_and_update(
             {"opened_at": recent, "diagnosis.cause": {"$exists": True}, **free},
-            {"$set": {"investigation": {"status": "running", "at": now}}},
+            {
+                "$set": {"investigation.status": "running", "investigation.at": now},
+                "$inc": {"investigation.attempts": 1},
+            },
             sort=[("opened_at", 1)],
             return_document=ReturnDocument.AFTER,
         )
@@ -82,15 +87,7 @@ class AiWorker:
                 log.exception("investigation failed", extra={"ctx": {"incident": incident["_id"]}})
                 await self.db.incidents.update_one(
                     {"_id": incident["_id"]},
-                    {
-                        "$set": {
-                            "investigation": {
-                                "status": "failed",
-                                "error": type(exc).__name__,
-                                "at": incident["investigation"]["at"],
-                            }
-                        }
-                    },
+                    {"$set": {"investigation.status": "failed", "investigation.error": type(exc).__name__}},
                 )
                 self.metrics.count("firstlight.ai.investigations", 1, ["status:failed"])
                 return
