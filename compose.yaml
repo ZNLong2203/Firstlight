@@ -49,10 +49,27 @@ services:
       MONGODB_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
     # mongod sizes its cache from this limit (about 1 GB at 3g); mongot shares it.
     mem_limit: ${MONGO_MEM_LIMIT:-3g}
+    # Every collection and index is a file. Docker's default of 1024 open files let mongod abort
+    # (WiredTiger error 24) once enough databases existed; 64000 is MongoDB's recommendation.
+    ulimits: &mongo-ulimits
+      nofile: {soft: 64000, hard: 64000}
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
     restart: unless-stopped
+    logging: *logging
+
+  # A throwaway MongoDB for the test suite, so tests never touch the demo's data. Not started by default:
+  #   docker compose --profile testdb up -d mongo-test
+  mongo-test:
+    image: mongodb/mongodb-atlas-local:8.0.34
+    profiles: [testdb]
+    ports: ["127.0.0.1:27019:27017"]
+    environment:
+      DO_NOT_TRACK: "1"
+    mem_limit: 1g
+    ulimits: *mongo-ulimits
+    restart: "no"
     logging: *logging
 
   datadog-agent:
