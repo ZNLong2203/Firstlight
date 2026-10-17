@@ -22,7 +22,9 @@ class JsonFormatter(logging.Formatter):
                 entry[field] = value
         context = getattr(record, "ctx", None)
         if isinstance(context, dict):
-            entry.update(context)
+            for key, value in context.items():
+                # Context never replaces a reserved field: Datadog reads the level from `status`.
+                entry[f"ctx.{key}" if key in entry else key] = value
         if record.exc_info:
             entry["error.stack"] = self.formatException(record.exc_info)
         return json.dumps(entry, default=str)

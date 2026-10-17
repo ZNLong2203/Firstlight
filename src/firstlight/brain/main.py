@@ -98,7 +98,7 @@ async def run() -> None:
                 if loop.time() >= next_forecast:
                     next_forecast = loop.time() + FORECAST_EVERY_S
                     counts = await forecast_once(db, metrics, now)
-                    log.info("forecast done", extra={"ctx": {"status": counts}})
+                    log.info("forecast done", extra={"ctx": {"ponds": counts}})
                 await rollups_due(db, now, done)
             except Exception:
                 log.exception("brain cycle failed")
