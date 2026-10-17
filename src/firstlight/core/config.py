@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # sequence number, which no index covers. That is the regression scenario 3 deploys and rolls back.
     ingest_duplicate_check: Literal["id", "fields"] = "id"
 
+    # Telegram: messages to the farm owner with an "acknowledged" button; off until a bot exists.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_escalation_chat_id: str = ""  # who hears when nobody acknowledges in 3 minutes
+    telegram_webhook_secret: str = ""
+    public_host: str = "localhost"  # links in messages open the console here
+
     firstlight_api_url: str = "http://localhost:8000"
     edge_control_url: str = "http://localhost:9000"  # the API reaches the simulator's control port here
     edge_control_port: int = 9000

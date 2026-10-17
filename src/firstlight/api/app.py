@@ -24,6 +24,7 @@ from firstlight.core.config import Settings, get_settings
 from firstlight.core.metrics import Metrics
 from firstlight.core.mongo import database, make_client
 from firstlight.core.schema import ensure_schema
+from firstlight.core.telegram import Telegram
 
 
 async def record_deployment(db: Any, settings: Settings) -> None:
@@ -51,6 +52,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")
     app.state.hub = Hub()
     app.state.commands = CommandHub()
+    app.state.telegram = Telegram(settings)
+    if (
+        app.state.telegram.enabled
+        and settings.telegram_webhook_secret
+        and settings.public_host != "localhost"
+    ):
+        await app.state.telegram.set_webhook(
+            f"https://{settings.public_host}/v1/hooks/telegram", settings.telegram_webhook_secret
+        )
     app.state.edge = httpx.AsyncClient(
         base_url=settings.edge_control_url, timeout=5.0, headers={"X-Gateway-Token": settings.gateway_token}
     )
@@ -69,6 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         await app.state.edge.aclose()
+        await app.state.telegram.close()
         await app.state.mongo.close()
 
 

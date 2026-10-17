@@ -111,6 +111,10 @@ services:
       DEMO_CODE: ${DEMO_CODE:-}
       EDGE_CONTROL_URL: http://edge:9000  # the simulator's control port, never published
       INGEST_DUPLICATE_CHECK: ${INGEST_DUPLICATE_CHECK:-id}  # "fields" is release 1.4's regression
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
     labels:
       com.datadoghq.tags.service: firstlight-api
       com.datadoghq.tags.env: ${DD_ENV:-local}
@@ -140,6 +144,8 @@ services:
       GOOGLE_SERVICE_ACCOUNT_B64: ${GOOGLE_SERVICE_ACCOUNT_B64:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_ESCALATION_CHAT_ID: ${TELEGRAM_ESCALATION_CHAT_ID:-}
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
     labels:
       com.datadoghq.tags.service: firstlight-brain
       com.datadoghq.tags.env: ${DD_ENV:-local}

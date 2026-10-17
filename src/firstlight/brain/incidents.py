@@ -446,6 +446,15 @@ async def _close(db: Db, incident: Doc, status: str, now: datetime, update: Doc,
     )
 
 
+def _first_sent(incident: Doc) -> datetime | None:
+    times = [
+        item["sent_at"]
+        for item in incident.get("outbox", [])
+        if item.get("sent_at") and item.get("to") == "owner"
+    ]
+    return min(times, default=None)
+
+
 async def resolve(db: Db, incident: Doc, now: datetime, metrics: Metrics, extra: Doc | None = None) -> None:
     onset = (incident.get("diagnosis") or {}).get("onset") or incident["opened_at"]
     stats = await (
@@ -466,6 +475,9 @@ async def resolve(db: Db, incident: Doc, now: datetime, metrics: Metrics, extra:
             "oxygen_debt": round(stats[0]["oxygen_debt"] or 0.0, 2),
             "below_safe_min": round(stats[0]["below_safe"] / 6, 1),
         }
+    acknowledged, sent = incident.get("acknowledged_at"), _first_sent(incident)
+    if acknowledged and sent:
+        result["mtta_s"] = round((acknowledged - sent).total_seconds())
     if extra and "gap" in extra:
         result |= {"blind_s": extra["gap"]["blind_s"], "coverage": extra["gap"].get("coverage")}
     cause = (incident.get("diagnosis") or {}).get("cause", "unknown")
@@ -521,7 +533,12 @@ async def advance(
             "confidence": diagnosis.confidence,
         }
         entries = [diagnosed, *timeline]
-        update |= {"actions": actions, "approvals": approvals, "status": new_status}
+        outbox = [
+            {"to": e["to"], "text": e["text"], "status": "pending", "at": now}
+            for e in timeline
+            if e["kind"] == "notify"
+        ]
+        update |= {"actions": actions, "approvals": approvals, "status": new_status, "outbox": outbox}
         tags = [f"cause:{diagnosis.cause}", f"scope:{incident['scope']}"]
         metrics.count("firstlight.incident.opened", 1, tags)
         if new_status == "dismissed":
@@ -586,6 +603,10 @@ async def _escalate(db: Db, incident: Doc, now: datetime, reason: str, minutes: 
         {"t": now, "kind": "notify", "to": "owner", "channel": "console", "text": text},
     ]
     await _push(db, incident, entries, {"status": "escalated"})
+    await db.incidents.update_one(
+        {"_id": incident["_id"]},
+        {"$push": {"outbox": {"to": "owner", "text": text, "status": "pending", "at": now}}},
+    )
     log.warning("incident escalated", extra={"ctx": {"incident": incident["_id"], "reason": reason}})
 
 

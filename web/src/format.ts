@@ -156,6 +156,12 @@ export function describe(entry: TimelineEntry): string {
       return `${text("action")} approved`;
     case "no_standby":
       return "No standby aerator left to start";
+    case "telegram":
+      return `Sent on Telegram to the ${text("to")}`;
+    case "acknowledged":
+      return `${text("by")} acknowledged on Telegram`;
+    case "unacknowledged":
+      return "Nobody acknowledged in 3 min: sent to a second person";
     case "ai_investigation": {
       const verdict =
         entry.agrees == null ? ", where the rules had no answer" : entry.agrees ? ", agrees with the rules" : ", disagrees with the rules";

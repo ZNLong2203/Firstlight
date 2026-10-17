@@ -14,11 +14,13 @@ from firstlight.ai.memory import ensure_search_indexes
 from firstlight.brain.ai_worker import AiWorker
 from firstlight.brain.forecast import classify, forecast_pipeline
 from firstlight.brain.incidents import Policy, incident_cycle
+from firstlight.brain.notifier import Notifier
 from firstlight.brain.playbooks import ensure_playbooks
 from firstlight.brain.rollup import hour_rollup, minute_rollup
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
 from firstlight.core.mongo import database, make_client
+from firstlight.core.telegram import Telegram
 
 log = logging.getLogger("firstlight.brain")
 
@@ -106,6 +108,7 @@ async def run() -> None:
     if gemini.enabled:
         await ensure_search_indexes(db)
     ai = AiWorker(db, gemini, metrics)
+    notifier = Notifier(db, Telegram(settings), settings)
     done: dict[str, datetime] = {}
     loop = asyncio.get_running_loop()
     cycles = 0
@@ -118,6 +121,7 @@ async def run() -> None:
                     counts = await forecast_once(db, metrics, now)
                     open_incidents = await incident_cycle(db, metrics, policy, now)
                     await rollups_due(db, now, done)
+                await notifier.cycle(now)
                 await ai.cycle(now)
                 if cycles % 6 == 0:  # a status line every minute is enough
                     log.info("cycle done", extra={"ctx": {"ponds": counts, "open_incidents": open_incidents}})

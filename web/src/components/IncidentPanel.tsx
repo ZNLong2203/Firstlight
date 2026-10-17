@@ -99,9 +99,10 @@ function Proof({ incident }: { incident: Incident }) {
           lowest,
           ["Under 4 mg/L", m.below_safe_min != null ? `${m.below_safe_min} min` : "–"],
           ["Resolved in", m.mttr_min != null ? `${m.mttr_min} min` : "–"],
+          ...(m.mtta_s != null ? [["Acknowledged in", seconds(m.mtta_s)] as [string, string]] : []),
         ];
   return (
-    <dl className="grid grid-cols-3 gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/20 sm:grid-cols-5">
+    <dl className="grid grid-cols-3 gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/20">
       {cells.map(([label, value]) => (
         <div key={label}>
           <dt className="text-[10px] uppercase tracking-wider text-emerald-300/70">{label}</dt>

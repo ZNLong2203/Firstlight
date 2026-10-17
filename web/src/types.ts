@@ -101,6 +101,7 @@ export interface IncidentMetrics {
   lead_time_min?: number | null;
   blind_s?: number;
   coverage?: number | null;
+  mtta_s?: number;
 }
 
 export interface Incident {
