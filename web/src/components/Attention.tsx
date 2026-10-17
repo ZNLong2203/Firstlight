@@ -25,7 +25,7 @@ export function Attention({ ponds, incidents, now, offsetHours, selected, onSele
     .filter(({ pond, status }) => status !== "ok" && !covered.has(pond._id))
     .sort((a, b) => urgency(a.pond, a.status) - urgency(b.pond, b.status));
   const closed = all
-    .filter((i) => !i.open)
+    .filter((i) => !i.open && i.diagnosis && i.diagnosis.cause !== "unknown") // proof needs a known cause
     .sort((a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""))
     .slice(0, 6);
   const cards = open.length + loose.length;
