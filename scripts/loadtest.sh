@@ -55,8 +55,9 @@ PY
 )
 
 cleanup() {
-  docker exec load-api python -c "import os; from pymongo import MongoClient; MongoClient(os.environ['MONGODB_URI']).drop_database('firstlight_load')" 2>/dev/null || true
   docker rm -f load-edge load-brain load-api >/dev/null 2>&1 || true
+  # Dropped only once nothing writes to it any more; the demo's API has the driver and the address.
+  docker exec firstlight-api-1 python -c "import os; from pymongo import MongoClient; MongoClient(os.environ['MONGODB_URI']).drop_database('firstlight_load')" 2>/dev/null || true
   rm -f "$ENVFILE"
   echo "cleaned up: load containers removed, firstlight_load dropped"
 }
