@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     mongodb_uri: str = "mongodb://localhost:27017/?directConnection=true"
     mongodb_db: str = "firstlight"
     mongodb_timeout_ms: int = 5000
+    mongodb_socket_timeout_ms: int = 20000
 
     dd_env: str = "local"
     dd_version: str = "dev"
@@ -37,6 +38,11 @@ class Settings(BaseSettings):
     sim_batch_seconds: int = 10
     # Farm clock = UTC + offset. -5 puts 02:00 on the farm at 14:00 in Vietnam, in time for an afternoon demo.
     sim_farm_clock_offset_hours: float = -5.0
+
+    # A pond counts as recovered after DO stays at or above 4 mg/L, not falling, for this long.
+    # Two minutes keeps a live demo moving; a farm would use ten.
+    recovery_stable_min: float = 2.0
+    escalate_after_min: float = 10.0
 
 
 @lru_cache

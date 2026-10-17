@@ -13,6 +13,9 @@ def make_client(settings: Settings) -> AsyncMongoClient[Doc]:
         settings.mongodb_uri,
         appname=settings.dd_service,
         serverSelectionTimeoutMS=settings.mongodb_timeout_ms,
+        # A connection that dies mid-reply errors out instead of blocking the caller forever.
+        # Change streams wait at most a second per round trip, well inside this.
+        socketTimeoutMS=settings.mongodb_socket_timeout_ms,
         tz_aware=True,
     )
 
