@@ -6,6 +6,7 @@ import httpx
 import pytest
 from pymongo.errors import WriteError
 
+from firstlight.core import config
 from firstlight.edge.farms import build_farms
 from firstlight.edge.gateway import Gateway
 
@@ -68,3 +69,25 @@ async def test_ingest_rejects_a_wrong_token(api: tuple[httpx.AsyncClient, Any]) 
         "/v1/ingest", json=batch(Gateway(FARM), datetime.now(UTC)), headers={"X-Gateway-Token": "nope"}
     )
     assert response.status_code == 401
+
+
+async def test_release_1_4_finds_duplicates_by_gateway_and_sequence(
+    api: tuple[httpx.AsyncClient, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, db = api
+    monkeypatch.setenv("INGEST_DUPLICATE_CHECK", "fields")
+    config.get_settings.cache_clear()
+    gateway = Gateway(FARM)
+    first = batch(gateway, datetime.now(UTC))
+    assert (await client.post("/v1/ingest", json=first)).json()["stored"] == 4
+    resent = {**first, "batch_id": first["batch_id"] + "-again"}  # same gateway and sequence number
+    assert (await client.post("/v1/ingest", json=resent)).json() == {"stored": 0, "duplicate": True}
+    claim = await db.ingest_batches.find_one({"_id": first["batch_id"]})
+    assert claim["seq"] == first["seq"]
+
+
+async def test_every_api_start_is_recorded_as_a_deployment(api: tuple[httpx.AsyncClient, Any]) -> None:
+    _, db = api
+    deployment = await db.deployments.find_one({"service": "firstlight-api"})
+    assert deployment["version"] == config.get_settings().dd_version
+    assert deployment["config"] == {"ingest_duplicate_check": "id"}

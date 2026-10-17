@@ -5,6 +5,8 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, Response
@@ -17,10 +19,22 @@ from firstlight.api.incidents import router as incidents_router
 from firstlight.api.ingest import router as ingest_router
 from firstlight.api.live import Hub, flush_every_second, watch
 from firstlight.api.live import router as live_router
-from firstlight.core.config import get_settings
+from firstlight.core.config import Settings, get_settings
 from firstlight.core.metrics import Metrics
 from firstlight.core.mongo import database, make_client
 from firstlight.core.schema import ensure_schema
+
+
+async def record_deployment(db: Any, settings: Settings) -> None:
+    """Every start of the API is a deployment the brain can line up against an incident."""
+    await db.deployments.insert_one(
+        {
+            "service": "firstlight-api",
+            "version": settings.dd_version,
+            "started_at": datetime.now(UTC),
+            "config": {"ingest_duplicate_check": settings.ingest_duplicate_check},
+        }
+    )
 
 
 @asynccontextmanager
@@ -31,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.metrics = Metrics(settings)
     try:
         await ensure_schema(app.state.db)
+        await record_deployment(app.state.db, settings)
     except Exception:
         logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")
     app.state.hub = Hub()

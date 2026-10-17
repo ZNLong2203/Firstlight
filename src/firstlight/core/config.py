@@ -1,6 +1,7 @@
 """Settings read from the environment (see .env.example)."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -29,6 +30,9 @@ class Settings(BaseSettings):
     webhook_secret: str = ""
     gateway_token: str = ""
     demo_code: str = ""
+    # "id" claims each batch by its id. Release 1.4 ships "fields": it looks batches up by gateway and
+    # sequence number, which no index covers. That is the regression scenario 3 deploys and rolls back.
+    ingest_duplicate_check: Literal["id", "fields"] = "id"
 
     firstlight_api_url: str = "http://localhost:8000"
     edge_control_url: str = "http://localhost:9000"  # the API reaches the simulator's control port here

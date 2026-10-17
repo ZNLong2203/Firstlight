@@ -91,6 +91,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         ),
     ],
     "chaos": [IndexModel([("status", ASCENDING), ("started_at", DESCENDING)], name="status_started")],
+    "deployments": [IndexModel([("service", ASCENDING), ("started_at", DESCENDING)], name="service_started")],
     "events": [
         IndexModel([("pond", ASCENDING), ("ts", DESCENDING)], name="pond_ts"),
         IndexModel([("received_at", ASCENDING)], name="ttl_30d", expireAfterSeconds=30 * DAY),

@@ -170,12 +170,21 @@ async def ingest(batch: GatewayBatch, request: Request) -> dict[str, Any]:
     received = datetime.now(UTC)
     _tag_span(gateway=batch.gateway, batch_id=batch.batch_id)
 
+    if get_settings().ingest_duplicate_check == "fields" and await db.ingest_batches.find_one(
+        {"gateway": batch.gateway, "seq": batch.seq}, {"_id": 1}
+    ):
+        # Release 1.4: "a gateway never sends the same sequence number twice". No index covers
+        # {gateway, seq}, so this is a collection scan of a day of batches on every request.
+        metrics.count("firstlight.ingest.duplicates", 1, [f"gateway:{batch.gateway}"])
+        return {"stored": 0, "duplicate": True}
+
     # Time series collections cannot hold a unique index, so the batch id is claimed here first.
     try:
         await db.ingest_batches.insert_one(
             {
                 "_id": batch.batch_id,
                 "gateway": batch.gateway,
+                "seq": batch.seq,
                 "received_at": received,
                 "n": len(batch.readings),
             }
