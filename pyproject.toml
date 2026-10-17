@@ -44,7 +44,9 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S105", "S311"]
+# The simulator needs reproducible randomness, not cryptographic randomness.
+"src/firstlight/edge/**" = ["S311"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

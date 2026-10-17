@@ -12,7 +12,7 @@ def make_client(settings: Settings) -> AsyncMongoClient[Doc]:
     return AsyncMongoClient(
         settings.mongodb_uri,
         appname=settings.dd_service,
-        serverSelectionTimeoutMS=5000,
+        serverSelectionTimeoutMS=settings.mongodb_timeout_ms,
         tz_aware=True,
     )
 
