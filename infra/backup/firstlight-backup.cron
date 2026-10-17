@@ -1,0 +1,2 @@
+# 02:30 Asia/Ho_Chi_Minh = 19:30 UTC
+30 19 * * * root /opt/firstlight/infra/backup/mongo-backup.sh >> /var/log/firstlight-backup.log 2>&1

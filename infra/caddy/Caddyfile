@@ -1,0 +1,26 @@
+# Demo VM only (profile proxy). Caddy obtains the certificate for PUBLIC_HOST.
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	# API, SSE streams and the Datadog webhook
+	handle /v1/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Console
+	handle {
+		reverse_proxy web:80
+	}
+
+	# Shown while the app containers are not running yet
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		respond `<!doctype html><meta name="viewport" content="width=device-width"><title>Firstlight</title>
+<body style="font-family:system-ui;margin:0;min-height:100vh;display:grid;place-items:center;background:#0f172a;color:#e2e8f0">
+<div style="text-align:center"><h1 style="color:#fb923c;margin:0 0 8px">Firstlight</h1>
+<p style="margin:0">Every pond makes it to morning.</p>
+<p style="color:#94a3b8">The night watch is starting. Check back soon.</p></div></body>` 503
+	}
+}

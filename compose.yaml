@@ -1,0 +1,178 @@
+# Firstlight: one compose file for the laptop and the demo VM.
+# Choose what runs with COMPOSE_PROFILES in .env (see .env.example):
+#   localdb  MongoDB Atlas Local          datadog  Datadog Agent
+#   app      api, brain, edge, web        proxy    Caddy (HTTPS, demo VM only)
+name: firstlight
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-datadog-env: &datadog-env
+  DD_ENV: ${DD_ENV:-local}
+  DD_VERSION: ${DD_VERSION:-dev}
+  DD_SITE: ${DD_SITE:-}
+  DD_AGENT_HOST: datadog-agent
+  DD_TRACE_AGENT_PORT: "8126"
+  DD_DOGSTATSD_PORT: "8125"
+  DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+  DD_LOGS_INJECTION: "true"
+  DD_RUNTIME_METRICS_ENABLED: "true"
+
+x-mongo-env: &mongo-env
+  # Empty MONGODB_URI means the MongoDB container on this host (profile localdb).
+  MONGODB_URI: ${MONGODB_URI:-mongodb://${MONGO_ROOT_USER:-firstlight}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/?directConnection=true&authSource=admin}
+  MONGODB_DB: ${MONGODB_DB:-firstlight}
+
+x-python-app: &python-app
+  build: .
+  image: ${FIRSTLIGHT_IMAGE:-firstlight}:${DD_VERSION:-dev}
+  profiles: [app]
+  restart: unless-stopped
+  logging: *logging
+  depends_on:
+    mongo:
+      condition: service_healthy
+      required: false
+
+services:
+  mongo:
+    image: mongodb/mongodb-atlas-local:8.0.34
+    profiles: [localdb]
+    hostname: mongo
+    ports: ["127.0.0.1:27017:27017"]
+    environment:
+      DO_NOT_TRACK: "1"
+      MONGODB_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-firstlight}
+      MONGODB_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
+    # mongod sizes its cache from this limit (about 1 GB at 3g); mongot shares it.
+    mem_limit: ${MONGO_MEM_LIMIT:-3g}
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    restart: unless-stopped
+    logging: *logging
+
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7.84.3
+    profiles: [datadog]
+    environment:
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_SITE: ${DD_SITE:-}
+      DD_ENV: ${DD_ENV:-local}
+      DD_HOSTNAME: firstlight-${DD_ENV:-local}
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    <<: *python-app
+    command: ["firstlight", "api"]
+    ports: ["127.0.0.1:8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status != 200)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    environment:
+      <<: [*datadog-env, *mongo-env]
+      DD_SERVICE: firstlight-api
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      DEMO_CODE: ${DEMO_CODE:-}
+    labels:
+      com.datadoghq.tags.service: firstlight-api
+      com.datadoghq.tags.env: ${DD_ENV:-local}
+      com.datadoghq.tags.version: ${DD_VERSION:-dev}
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "firstlight-api"}]'
+
+  brain:
+    <<: *python-app
+    command: ["firstlight", "brain"]
+    environment:
+      <<: [*datadog-env, *mongo-env]
+      DD_SERVICE: firstlight-brain
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_APP_KEY: ${DD_APP_KEY:-}
+      DD_LLMOBS_ENABLED: ${DD_TRACE_ENABLED:-false}
+      DD_LLMOBS_ML_APP: ${DD_LLMOBS_ML_APP:-firstlight-investigator}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-gemini-3.5-flash}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-gemini-embedding-2}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    labels:
+      com.datadoghq.tags.service: firstlight-brain
+      com.datadoghq.tags.env: ${DD_ENV:-local}
+      com.datadoghq.tags.version: ${DD_VERSION:-dev}
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "firstlight-brain"}]'
+
+  edge:
+    <<: *python-app
+    command: ["firstlight", "edge"]
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: firstlight-edge
+      FIRSTLIGHT_API_URL: http://api:8000
+      SIM_FARMS: ${SIM_FARMS:-50}
+      SIM_PONDS_PER_FARM: ${SIM_PONDS_PER_FARM:-4}
+      SIM_BATCH_SECONDS: ${SIM_BATCH_SECONDS:-10}
+      SIM_FARM_CLOCK_START: ${SIM_FARM_CLOCK_START:-02:00}
+    labels:
+      com.datadoghq.tags.service: firstlight-edge
+      com.datadoghq.tags.env: ${DD_ENV:-local}
+      com.datadoghq.tags.version: ${DD_VERSION:-dev}
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "firstlight-edge"}]'
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_DD_RUM_APPLICATION_ID: ${VITE_DD_RUM_APPLICATION_ID:-}
+        VITE_DD_RUM_CLIENT_TOKEN: ${VITE_DD_RUM_CLIENT_TOKEN:-}
+        VITE_DD_SITE: ${VITE_DD_SITE:-}
+        VITE_DD_ENV: ${DD_ENV:-local}
+        VITE_DD_VERSION: ${DD_VERSION:-dev}
+    image: ${FIRSTLIGHT_WEB_IMAGE:-firstlight-web}:${DD_VERSION:-dev}
+    profiles: [app]
+    ports: ["127.0.0.1:8080:80"]
+    depends_on: [api]
+    restart: unless-stopped
+    logging: *logging
+
+  caddy:
+    image: caddy:2.11.7
+    profiles: [proxy]
+    ports: ["80:80", "443:443"]
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api: { condition: service_started, required: false }
+      web: { condition: service_started, required: false }
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  mongo-data:
+  mongo-config:
+  caddy-data:
+  caddy-config:
