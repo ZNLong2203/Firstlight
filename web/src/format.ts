@@ -156,6 +156,10 @@ export function describe(entry: TimelineEntry): string {
       return `${text("action")} approved`;
     case "no_standby":
       return "No standby aerator left to start";
+    case "datadog": {
+      const after = entry.after_brain_s != null ? `, ${text("after_brain_s")} s after Firstlight` : "";
+      return `Datadog ${text("transition")}: ${text("monitor")}${after}`;
+    }
     case "escalated":
       return `Escalated: ${ESCALATION_LABEL[text("detail")] ?? text("detail")}`;
     case "resolved":

@@ -145,7 +145,9 @@ async def _next_id(db: Db) -> str:
     return f"INC-{(counter or {}).get('seq', 0):04d}"
 
 
-async def open_incident(db: Db, problem: Problem, states: dict[str, Doc], now: datetime) -> Doc | None:
+async def open_incident(
+    db: Db, problem: Problem, states: dict[str, Doc], now: datetime, source: str = "brain"
+) -> Doc | None:
     first = states[problem.ponds[0]]
     last = first.get("last") or {}
     doc: Doc = {
@@ -159,13 +161,14 @@ async def open_incident(db: Db, problem: Problem, states: dict[str, Doc], now: d
         "gateway": problem.gateway,
         "status": "investigating",
         "opened_at": now,
+        "detected_by": source,
         "signals": problem.signals,
         "at_detection": {
             "do": last.get("do"),
             "minutes_to_hypoxia": (first.get("forecast") or {}).get("minutes_to_hypoxia"),
             "last_seen": last.get("ts"),
         },
-        "timeline": [{"t": now, "kind": "detected", "source": "brain", "signals": problem.signals}],
+        "timeline": [{"t": now, "kind": "detected", "source": source, "signals": problem.signals}],
         "evidence": [],
         "actions": [],
     }
@@ -496,7 +499,9 @@ async def advance(
     status = incident["status"]
 
     if status == "investigating":
-        if incident["key"] not in active and not set(incident["ponds"]) & active:
+        # Datadog may see what the rules cannot; then the incident stays for a person instead of clearing.
+        cleared = incident["key"] not in active and not set(incident["ponds"]) & active
+        if cleared and incident.get("detected_by") != "datadog":
             await resolve(db, incident, now, metrics, {"note": "cleared on its own before a diagnosis"})
             return
         evidence, diagnosis, rows = await investigate(db, incident, states, by_id, now)
@@ -700,11 +705,71 @@ async def close_repair_tickets(db: Db, states: list[Doc], now: datetime) -> None
             )
 
 
+TRIGGERS = {"triggered", "re-triggered", "warn", "no data"}
+
+
+def _alert_problem(alert: Doc, states: list[Doc], by_id: dict[str, Doc]) -> Problem | None:
+    """The pond, gateway or farm a Datadog alert is about, as the brain would describe the problem."""
+    targets = alert.get("targets") or {}
+    signal = [f"datadog: {alert.get('title') or alert.get('monitor_id') or 'monitor'}"]
+    if (pond := targets.get("pond")) in by_id:
+        state = by_id[pond]
+        return Problem(pond, "pond", state.get("farm"), state.get("gateway"), [pond], signal)
+    for scope in ("gateway", "farm"):
+        if key := targets.get(scope):
+            ponds = sorted(s["_id"] for s in states if s.get(scope) == key)
+            if ponds:
+                first = by_id[ponds[0]]
+                return Problem(key, scope, first.get("farm"), first.get("gateway"), ponds, signal)
+    return None
+
+
+async def process_alerts(
+    db: Db, states: list[Doc], by_id: dict[str, Doc], open_incidents: list[Doc], now: datetime
+) -> None:
+    """Each new Datadog alert lands on the open incident for its pond, gateway or farm. A trigger with no
+    incident opens one, which the brain then investigates like its own."""
+    async for alert in db.alerts.find({"status": "new"}).sort("received_at", 1).limit(100):
+        problem = _alert_problem(alert, states, by_id)
+        incident = None
+        if problem:
+            incident = next(
+                (
+                    i
+                    for i in open_incidents
+                    if i["key"] == problem.key or set(problem.ponds) <= set(i["ponds"])
+                ),
+                None,
+            )
+        if incident:
+            lead = round((alert["received_at"] - incident["opened_at"]).total_seconds())
+            entry = {
+                "t": alert["received_at"],
+                "kind": "datadog",
+                "transition": alert["transition"],
+                "monitor": alert.get("title"),
+                "link": alert.get("link"),
+                "after_brain_s": lead if incident.get("detected_by") == "brain" else None,
+            }
+            await db.incidents.update_one({"_id": incident["_id"]}, {"$push": {"timeline": entry}})
+            incident["timeline"].append(entry)
+            update: Doc = {"status": "linked", "incident": incident["_id"]}
+        elif problem and alert["transition"] in TRIGGERS:
+            opened = await open_incident(db, problem, by_id, now, source="datadog")
+            if opened:
+                open_incidents.append(opened)
+            update = {"status": "linked" if opened else "ignored", "incident": opened and opened["_id"]}
+        else:
+            update = {"status": "ignored"}  # a recovery after we closed it, or a target we do not know
+        await db.alerts.update_one({"_id": alert["_id"]}, {"$set": {**update, "processed_at": now}})
+
+
 async def incident_cycle(db: Db, metrics: Metrics, policy: Policy, now: datetime) -> int:
     """Detect, then move every open incident one step. Returns how many incidents are open."""
     states = await db.pond_state.find({}).to_list()
     by_id = {s["_id"]: s for s in states}
     open_incidents = await db.incidents.find({"open": True}).to_list()
+    await process_alerts(db, states, by_id, open_incidents, now)
     covered = {p for i in open_incidents for p in i.get("ponds", [])}
     open_keys = {i["key"] for i in open_incidents}
     active: set[str] = set()

@@ -15,6 +15,7 @@ from firstlight.core import config
 
 TOKEN = "test-gateway-token"
 DEMO_CODE = "test-demo-code"
+WEBHOOK_SECRET = "test-webhook-secret"
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ async def api(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[tuple[httpx.Asyn
     monkeypatch.setenv("MONGODB_DB", f"firstlight_test_{uuid.uuid4().hex[:8]}")
     monkeypatch.setenv("GATEWAY_TOKEN", TOKEN)
     monkeypatch.setenv("DEMO_CODE", DEMO_CODE)
+    monkeypatch.setenv("WEBHOOK_SECRET", WEBHOOK_SECRET)
     config.get_settings.cache_clear()
     try:
         async with lifespan(app):

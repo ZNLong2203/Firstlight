@@ -15,6 +15,7 @@ from firstlight import __version__
 from firstlight.api.chaos import router as chaos_router
 from firstlight.api.commands import CommandHub, watch_commands
 from firstlight.api.commands import router as commands_router
+from firstlight.api.hooks import router as hooks_router
 from firstlight.api.incidents import router as incidents_router
 from firstlight.api.ingest import router as ingest_router
 from firstlight.api.live import Hub, flush_every_second, watch
@@ -77,6 +78,7 @@ app.include_router(live_router)
 app.include_router(commands_router)
 app.include_router(chaos_router)
 app.include_router(incidents_router)
+app.include_router(hooks_router)
 
 
 @app.get("/healthz")

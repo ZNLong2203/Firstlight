@@ -53,6 +53,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["."]
+# ddtrace's own pytest plugin would import the tracer before conftest.py can switch it off.
+addopts = "-p no:ddtrace"
 
 [tool.mypy]
 python_version = "3.12"
