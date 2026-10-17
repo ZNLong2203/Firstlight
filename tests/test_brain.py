@@ -143,3 +143,34 @@ async def test_rate_needs_two_minutes_of_readings(api: tuple[httpx.AsyncClient, 
     )
     result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
     assert result[0]["rate_3m"] is None
+
+
+async def test_a_cleaned_probe_starts_a_new_regime(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """Readings from a fouled probe must not make a freshly cleaned one look like a pond in danger."""
+    _, db = api
+    docs = []
+    for i in range(36):
+        ts = NOW - timedelta(seconds=10 * (35 - i))
+        clean = i >= 24  # cleaned two minutes ago
+        do, q = (5.0, 1.0) if clean else (1.2 + 0.01 * i, 0.55)
+        meta = {"farm": "BL-01", "pond": "c", "gateway": "g"}
+        docs.append({"ts": ts, "meta": meta, "do": do, "probe": {"id": "DO-c", "q": q}})
+    await db.readings.insert_many(docs)
+    result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
+    assert result[0]["do"] == pytest.approx(5.0) and result[0]["minutes_to_hypoxia"] is None
+    assert result[0]["points"] == 12
+
+
+async def test_a_fouling_probe_keeps_one_regime(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """Quality drifting down a little each reading is not a cleaning: the rate stays measurable."""
+    _, db = api
+    docs = []
+    for i in range(30):
+        ts = NOW - timedelta(seconds=10 * (29 - i))
+        meta = {"farm": "BL-01", "pond": "f", "gateway": "g"}
+        docs.append(
+            {"ts": ts, "meta": meta, "do": 5.0 - 0.05 * i, "probe": {"id": "DO-f", "q": 1.0 - 0.017 * i}}
+        )
+    await db.readings.insert_many(docs)
+    result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
+    assert result[0]["points"] == 30 and result[0]["rate_3m"] == pytest.approx(-0.3, rel=0.05)

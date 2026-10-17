@@ -9,14 +9,18 @@ MIN_POINTS = 9  # 90 s of readings in the current regime before a slope means an
 RATE_POINTS = 12  # the 3-minute rate needs 2 minutes of readings; two points 10 s apart are mostly noise
 FALLING = -0.005  # mg/L per minute; anything flatter is noise
 TURNING_AMPS = 0.5
+# A probe's signal quality changing this much between two readings means it was cleaned or swapped.
+QUALITY_JUMP = 0.2
 
 
 def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
     """Least-squares slope of DO per pond: slope = cov(t, DO) / var(t), computed with window functions.
 
-    The fit only uses readings since the number of turning aerators last changed. When an aerator
-    stops, or a standby one starts, the old trend no longer describes the pond, so the regression
-    starts again instead of averaging the two regimes for the next twelve minutes.
+    The fit only uses readings since the pond's setup last changed: the number of turning aerators,
+    or a jump in the probe's signal quality. When an aerator stops, a standby starts, or a fouled
+    probe is cleaned, the old readings no longer describe the pond, so the regression starts again
+    instead of mixing two regimes for the next twelve minutes. Quality that drifts down as biofilm
+    grows is not a jump, so the rate of change stays measurable while a probe fouls.
     """
     cumulative = {"documents": ["unbounded", "current"]}
     by_pond = {"partitionBy": "$meta.pond", "sortBy": {"ts": 1}}
@@ -27,18 +31,31 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
     }
     changed = {
         "$cond": [
-            {"$and": [{"$ne": ["$previous", None]}, {"$ne": ["$previous", "$turning"]}]},
+            {
+                "$and": [
+                    {"$ne": ["$prev_turning", None]},
+                    {
+                        "$or": [
+                            {"$ne": ["$prev_turning", "$turning"]},
+                            {"$gte": [{"$abs": {"$subtract": ["$q", "$prev_q"]}}, QUALITY_JUMP]},
+                        ]
+                    },
+                ]
+            },
             1,
             0,
         ]
     }
     return [
         {"$match": {"ts": {"$gte": since}}},
-        {"$set": {"t": {"$toLong": "$ts"}, "turning": turning}},
+        {"$set": {"t": {"$toLong": "$ts"}, "turning": turning, "q": {"$ifNull": ["$probe.q", 1.0]}}},
         {
             "$setWindowFields": {
                 **by_pond,
-                "output": {"previous": {"$shift": {"output": "$turning", "by": -1}}},
+                "output": {
+                    "prev_turning": {"$shift": {"output": "$turning", "by": -1}},
+                    "prev_q": {"$shift": {"output": "$q", "by": -1}},
+                },
             }
         },
         {"$setWindowFields": {**by_pond, "output": {"regime": {"$sum": changed, "window": cumulative}}}},
