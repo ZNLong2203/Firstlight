@@ -3,6 +3,7 @@ import type { Status } from "../types";
 import type { Link } from "../useLive";
 
 const NIGHT_MINUTES = 12 * 60;
+const VIETNAM_UTC_OFFSET = 7;
 const DOT: Record<Status, string> = {
   alert: "bg-red-500",
   watch: "bg-amber-400",
@@ -32,10 +33,18 @@ export function TopBar({ now, offsetHours, counts, link }: Props) {
           </div>
         </div>
 
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-center gap-3">
           <span className="font-mono text-3xl font-semibold tabular-nums text-white">{farm ? hhmm(farm) : "--:--"}</span>
-          <span className="text-xs text-slate-400">
-            {!farm ? "farm time" : elapsed === null ? "daytime on the farms" : `dawn in ${duration(NIGHT_MINUTES - elapsed)}`}
+          <span className="flex flex-col text-xs leading-snug">
+            <span className="text-slate-300">
+              {!farm ? "farm time" : elapsed === null ? "daytime on the farms" : `dawn in ${duration(NIGHT_MINUTES - elapsed)}`}
+            </span>
+            {/* The simulated farms run on a shifted clock so a daytime demo happens during their night. */}
+            {farm && offsetHours !== VIETNAM_UTC_OFFSET && (
+              <span className="text-slate-500">
+                simulated farm clock · Vietnam {hhmm(farmClock(now, VIETNAM_UTC_OFFSET))}
+              </span>
+            )}
           </span>
         </div>
 
