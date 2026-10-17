@@ -1,16 +1,10 @@
-import { duration, farmClock, hhmm, nightElapsed, STATUS_LABEL } from "../format";
+import { duration, farmClock, hhmm, nightElapsed } from "../format";
+import { DOT, STATUS_LABEL, STATUS_ORDER } from "../status";
 import type { Status } from "../types";
 import type { Link } from "../useLive";
 
 const NIGHT_MINUTES = 12 * 60;
 const VIETNAM_UTC_OFFSET = 7;
-const DOT: Record<Status, string> = {
-  alert: "bg-red-500",
-  watch: "bg-amber-400",
-  blind: "bg-slate-400",
-  ok: "bg-emerald-400",
-};
-
 interface Props {
   now: number;
   offsetHours: number | null;
@@ -49,7 +43,7 @@ export function TopBar({ now, offsetHours, counts, link }: Props) {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {(["alert", "blind", "watch", "ok"] as const).map((status) => (
+          {STATUS_ORDER.filter((status) => status !== "sensor" || counts.sensor > 0).map((status) => (
             <span
               key={status}
               className={`flex items-center gap-1.5 rounded-full border border-night-700 px-2.5 py-1 text-xs ${

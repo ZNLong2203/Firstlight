@@ -1,10 +1,9 @@
-import type { PondState, Status } from "./types";
+import type { Incident, PondState, Status, TimelineEntry } from "./types";
 
 export const HYPOXIA_MGL = 3;
 export const SAFE_MGL = 4;
 const NO_DATA_S = 120; // the brain marks a pond blind after 60 s; the console also checks on its own
 
-export const STATUS_LABEL: Record<Status, string> = { ok: "Safe", watch: "Watch", alert: "Alert", blind: "Blind" };
 
 /** The brain's status, unless the last reading is so old that the brain itself may have stopped. */
 export function effectiveStatus(pond: PondState, now: number): Status {
@@ -18,6 +17,7 @@ export function urgency(pond: PondState, status: Status): number {
   if (status === "alert") return pond.last && pond.last.do <= HYPOXIA_MGL ? 0 : 1 + minutes;
   if (status === "blind") return 20_000;
   if (status === "watch") return 30_000 + minutes;
+  if (status === "sensor") return 50_000;
   return 100_000;
 }
 
@@ -25,6 +25,7 @@ export function urgency(pond: PondState, status: Status): number {
 export function reasons(pond: PondState, status: Status, now: number): string[] {
   const last = pond.last;
   if (status === "blind" || !last) return [last ? `No data for ${ago((now - Date.parse(last.ts)) / 1000)}` : "No data yet"];
+  if (status === "sensor") return ["Probe reads wrong", "Cleaning ticket open, nobody woken"];
   const out: string[] = [];
   const minutes = pond.forecast?.minutes_to_hypoxia;
   if (last.do <= HYPOXIA_MGL) out.push("Below 3 mg/L now");
@@ -69,4 +70,93 @@ export function duration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   return h ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`;
+}
+
+export function clockTime(iso: string | undefined, offsetHours: number, seconds = false): string {
+  if (!iso) return "--:--";
+  const date = farmClock(Date.parse(iso), offsetHours);
+  const base = hhmm(date);
+  return seconds ? `${base}:${String(date.getUTCSeconds()).padStart(2, "0")}` : base;
+}
+
+export const CAUSE_LABEL: Record<string, string> = {
+  aerator_failure: "Aerator failure",
+  power_outage: "Power cut",
+  sensor_fault: "Probe fault",
+  gateway_offline: "Gateway offline",
+  ingest_regression: "Ingest stopped",
+  unknown: "Unexplained",
+};
+
+const SIGNAL_LABEL: Record<string, string> = {
+  aerator_down: "an aerator stopped turning",
+  hypoxia_risk: "heading for 3 mg/L",
+  no_data: "no data",
+  probe_degraded: "probe signal weak",
+  gateway_silent: "the gateway went silent",
+  farm_dark: "every aerator on the farm stopped",
+  fleet_silent: "most gateways went silent",
+};
+
+const ESCALATION_LABEL: Record<string, string> = {
+  command_failed: "a command could not be carried out",
+  standby_idle: "the standby aerator is on but not turning",
+  no_recovery: "oxygen has not recovered",
+};
+
+export function target(incident: Incident): string {
+  if (incident.scope === "pond") return `Pond ${incident.pond}`;
+  if (incident.scope === "gateway") return `Gateway ${incident.gateway} · ${incident.ponds.length} ponds`;
+  if (incident.scope === "farm") return `Farm ${incident.farm} · ${incident.ponds.length} ponds`;
+  return `${incident.ponds.length} ponds across the estate`;
+}
+
+/** One line of an incident timeline in plain words. */
+export function describe(entry: TimelineEntry): string {
+  const text = (key: string) => String(entry[key] ?? "");
+  switch (entry.kind) {
+    case "detected":
+      return `Detected: ${((entry.signals as string[]) ?? []).map((s) => SIGNAL_LABEL[s] ?? s).join(", ")}`;
+    case "diagnosed":
+      return `Diagnosed: ${CAUSE_LABEL[text("cause")] ?? text("cause")}, ${Math.round(Number(entry.confidence) * 100)}% sure`;
+    case "action_sent":
+      return `Sent ${text("action")}${entry.device ? ` to ${text("device")}` : ""}`;
+    case "action_done":
+      return `${entry.device ? text("device") : text("action")} confirmed by the gateway`;
+    case "action_failed":
+      return `${text("action")} failed on the gateway`;
+    case "action_expired":
+      return `${text("action")} was never acknowledged`;
+    case "notify":
+      return `Message to the ${text("to")}: “${text("text")}”`;
+    case "ticket":
+      return `Ticket: ${text("text")}`;
+    case "ticket_closed":
+      return `Ticket closed: ${text("detail")}`;
+    case "verifying":
+      return `Verifying: ${text("detail")}`;
+    case "approval_requested":
+      return `Waiting for a person to approve ${text("action")}`;
+    case "approved":
+      return `${text("action")} approved`;
+    case "no_standby":
+      return "No standby aerator left to start";
+    case "escalated":
+      return `Escalated: ${ESCALATION_LABEL[text("detail")] ?? text("detail")}`;
+    case "resolved":
+      return entry.gap ? "Data back; the blind spell was checked" : entry.note ? `Closed: ${text("note")}` : "Recovered";
+    default:
+      return entry.kind;
+  }
+}
+
+/** The step a person most needs to see on a card. */
+export function headline(incident: Incident): TimelineEntry | undefined {
+  const skip = new Set(["notify"]);
+  return [...incident.timeline].reverse().find((entry) => !skip.has(entry.kind));
+}
+
+export function seconds(value: number | null | undefined): string {
+  if (value == null) return "–";
+  return value < 90 ? `${value} s` : `${(value / 60).toFixed(1)} min`;
 }

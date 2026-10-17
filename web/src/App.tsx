@@ -1,12 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Attention } from "./components/Attention";
+import { ChaosPanel } from "./components/ChaosPanel";
 import { countBy, FleetMap } from "./components/FleetMap";
+import { IncidentDrawer } from "./components/IncidentDrawer";
 import { PondDrawer } from "./components/PondDrawer";
 import { TopBar } from "./components/TopBar";
+import { useDemoCode } from "./demo";
 import { effectiveStatus } from "./format";
-import type { Meta } from "./types";
+import { LEGEND } from "./status";
+import type { Incident, Meta } from "./types";
 import { useLivePonds, useNow } from "./useLive";
+
+const RECENT_MS = 60 * 60_000; // a pond's drawer keeps showing its last incident for an hour
+
+/** The incident a pond's drawer should show: the open one, or the latest that closed within the hour. */
+function incidentFor(pond: string, incidents: Map<string, Incident>, now: number): Incident | undefined {
+  let best: Incident | undefined;
+  for (const incident of incidents.values()) {
+    if (!incident.ponds.includes(pond)) continue;
+    if (incident.open) return incident;
+    const closed = Date.parse(incident.closed_at ?? "");
+    if (now - closed < RECENT_MS && (!best || closed > Date.parse(best.closed_at ?? ""))) best = incident;
+  }
+  return best;
+}
 
 /** The selected pond lives in the URL hash, so an alert can link straight to it. */
 function useSelectedPond(): [string | null, (id: string | null) => void] {
@@ -36,14 +54,17 @@ function useMeta(): Meta | null {
 }
 
 export function App() {
-  const { ponds, link } = useLivePonds();
+  const { ponds, incidents, link } = useLivePonds();
   const now = useNow();
   const meta = useMeta();
+  const [demoCode, setDemoCode] = useDemoCode();
   const [selected, select] = useSelectedPond();
   const list = useMemo(() => [...ponds.values()], [ponds]);
   const counts = countBy(list.map((p) => effectiveStatus(p, now)));
   const offset = meta?.farm_clock_offset_hours ?? null;
   const open = selected ? ponds.get(selected) : undefined;
+  const openIncident = selected?.startsWith("INC-") ? incidents.get(selected) : undefined;
+  const drawer = Boolean(open || openIncident);
   const toggle = useCallback((id: string) => select(id === selected ? null : id), [select, selected]);
   const close = useCallback(() => select(null), [select]);
 
@@ -61,7 +82,7 @@ export function App() {
       )}
       <main
         className={`mx-auto max-w-[1600px] space-y-8 px-4 py-6 transition-opacity sm:px-6 ${
-          open ? "xl:pr-[544px]" : ""
+          drawer ? "xl:pr-[544px]" : ""
         } ${link === "live" ? "" : "opacity-60"}`}
       >
         {link === "connecting" && list.length === 0 ? (
@@ -74,7 +95,14 @@ export function App() {
               <h2 id="attention-title" className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                 Needs attention
               </h2>
-              <Attention ponds={list} now={now} selected={selected} onSelect={toggle} />
+              <Attention
+                ponds={ponds}
+                incidents={incidents}
+                now={now}
+                offsetHours={offset ?? 0}
+                selected={selected}
+                onSelect={toggle}
+              />
             </section>
             <section aria-labelledby="fleet-title">
               <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
@@ -88,21 +116,34 @@ export function App() {
           </>
         )}
       </main>
-      {open && <PondDrawer pond={open} now={now} offsetHours={offset ?? 0} onClose={close} />}
+      {open && (
+        <PondDrawer
+          pond={open}
+          incident={incidentFor(open._id, incidents, now)}
+          now={now}
+          offsetHours={offset ?? 0}
+          demoCode={demoCode}
+          onClose={close}
+        />
+      )}
+      {openIncident && (
+        <IncidentDrawer
+          incident={openIncident}
+          offsetHours={offset ?? 0}
+          demoCode={demoCode}
+          onSelect={select}
+          onClose={close}
+        />
+      )}
+      <ChaosPanel ponds={list} selected={selected} offsetHours={offset ?? 0} demoCode={demoCode} onDemoCode={setDemoCode} />
     </div>
   );
 }
 
 function Legend() {
-  const items = [
-    ["bg-emerald-500/40", "Safe"],
-    ["bg-amber-400/60", "Watch: under 4, falling or an aerator down"],
-    ["bg-red-500", "Alert: under 3 within 30 min"],
-    ["blind-hatch ring-1 ring-slate-500/50", "Blind: no data"],
-  ];
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-      {items.map(([swatch, label]) => (
+      {LEGEND.map(([swatch, label]) => (
         <li key={label} className="flex items-center gap-1.5">
           <span className={`size-2.5 rounded-sm ${swatch}`} />
           {label}

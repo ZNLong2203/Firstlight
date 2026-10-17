@@ -34,11 +34,12 @@ export function FleetMap({ ponds, now, selected, onSelect }: Props) {
                 <p className="mt-0.5 text-xs text-slate-500">
                   {farms.length} farms · {all.length} ponds
                 </p>
-                {counts.alert + counts.watch + counts.blind > 0 && (
-                  <p className="mt-1 flex gap-2 text-xs font-medium">
+                {counts.alert + counts.watch + counts.blind + counts.sensor > 0 && (
+                  <p className="mt-1 flex flex-wrap gap-x-2 text-xs font-medium">
                     {counts.alert > 0 && <span className="text-red-400">{counts.alert} alert</span>}
                     {counts.blind > 0 && <span className="text-slate-400">{counts.blind} blind</span>}
                     {counts.watch > 0 && <span className="text-amber-300">{counts.watch} watch</span>}
+                    {counts.sensor > 0 && <span className="text-violet-300">{counts.sensor} sensor</span>}
                   </p>
                 )}
               </header>
@@ -70,7 +71,7 @@ export function FleetMap({ ponds, now, selected, onSelect }: Props) {
 }
 
 export function countBy(statuses: Status[]): Record<Status, number> {
-  const counts: Record<Status, number> = { ok: 0, watch: 0, alert: 0, blind: 0 };
+  const counts: Record<Status, number> = { ok: 0, watch: 0, alert: 0, sensor: 0, blind: 0 };
   for (const status of statuses) counts[status] += 1;
   return counts;
 }

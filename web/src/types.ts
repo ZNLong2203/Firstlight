@@ -1,4 +1,4 @@
-export type Status = "ok" | "watch" | "alert" | "blind";
+export type Status = "ok" | "watch" | "alert" | "sensor" | "blind";
 
 export interface PondLast {
   ts: string;
@@ -26,6 +26,7 @@ export interface PondState {
   forecast?: Forecast;
   freshness_s?: number | null;
   area_m2?: number;
+  open_incident?: string;
 }
 
 export interface Device {
@@ -53,6 +54,75 @@ export interface Meta {
   version: string;
   env: string;
   farm_clock_offset_hours: number;
+}
+
+export type IncidentStatus =
+  | "investigating"
+  | "mitigating"
+  | "verifying"
+  | "monitoring"
+  | "awaiting_approval"
+  | "escalated"
+  | "resolved"
+  | "dismissed";
+
+export interface TimelineEntry {
+  t: string;
+  kind: string;
+  [key: string]: unknown;
+}
+
+export interface EvidenceItem {
+  check: string;
+  cause: string;
+  verdict: "support" | "against";
+  weight: number;
+  detail: string;
+  at?: string;
+}
+
+export interface IncidentMetrics {
+  mttd_s?: number;
+  time_to_action_s?: number | null;
+  mttr_min?: number;
+  min_do?: number;
+  oxygen_debt?: number;
+  below_safe_min?: number;
+  lead_time_min?: number | null;
+}
+
+export interface Incident {
+  _id: string;
+  key: string;
+  scope: "pond" | "gateway" | "farm" | "estate";
+  open?: boolean;
+  pond: string | null;
+  ponds: string[];
+  farm: string | null;
+  gateway: string | null;
+  status: IncidentStatus;
+  opened_at: string;
+  closed_at?: string;
+  signals: string[];
+  diagnosis?: { cause: string; confidence: number; onset?: string; device?: string };
+  evidence: EvidenceItem[];
+  timeline: TimelineEntry[];
+  actions: { kind: string; action?: string; device?: string; status?: string; text?: string }[];
+  approvals?: { action: string; status: string }[];
+  metrics?: IncidentMetrics;
+  false_alarm_prevented?: boolean;
+}
+
+export interface Fault {
+  _id: string;
+  kind: string;
+  status: string;
+  farm?: string;
+  pond?: string;
+  gateway?: string;
+  device?: string;
+  started_at?: string;
+  cleared_at?: string;
 }
 
 export const PROVINCES: Record<string, string> = {

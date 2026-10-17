@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { PondState } from "./types";
+import type { Incident, PondState } from "./types";
 
 export type Link = "connecting" | "live" | "reconnecting";
 
@@ -12,6 +12,7 @@ const SILENT_MS = 25_000; // two missed heartbeats: the connection is dead even 
  */
 export function useLivePonds() {
   const [ponds, setPonds] = useState<Map<string, PondState>>(new Map());
+  const [incidents, setIncidents] = useState<Map<string, Incident>>(new Map());
   const [link, setLink] = useState<Link>("connecting");
   const lastEvent = useRef(Date.now());
 
@@ -19,7 +20,7 @@ export function useLivePonds() {
     let source: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
-    const parse = (event: Event) => JSON.parse((event as MessageEvent<string>).data) as PondState[];
+    const parse = <T = PondState>(event: Event) => JSON.parse((event as MessageEvent<string>).data) as T[];
     const heard = () => {
       lastEvent.current = Date.now();
     };
@@ -31,7 +32,17 @@ export function useLivePonds() {
       current.addEventListener("snapshot", (event) => {
         attempt = 0;
         setPonds(new Map(parse(event).map((p) => [p._id, p])));
+        setIncidents(new Map()); // the open and recent incidents follow right after
         setLink("live");
+        heard();
+      });
+      current.addEventListener("incidents", (event) => {
+        const changed = parse<Incident>(event);
+        setIncidents((previous) => {
+          const next = new Map(previous);
+          for (const incident of changed) next.set(incident._id, incident);
+          return next;
+        });
         heard();
       });
       current.addEventListener("ponds", (event) => {
@@ -72,7 +83,7 @@ export function useLivePonds() {
     };
   }, []);
 
-  return { ponds, link };
+  return { ponds, incidents, link };
 }
 
 export function useNow(intervalMs = 1000): number {

@@ -1,27 +1,25 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import { ago, effectiveStatus, perHour, reasons, STATUS_LABEL } from "../format";
-import { PROVINCES, type HistoryPoint, type PondDetail, type PondState, type Status } from "../types";
+import { ago, effectiveStatus, perHour, reasons } from "../format";
+import { BADGE, STATUS_LABEL } from "../status";
+import { PROVINCES, type HistoryPoint, type Incident, type PondDetail, type PondState } from "../types";
+import { IncidentPanel } from "./IncidentPanel";
 
 // ECharts is most of the bundle and only needed once a pond is opened.
 const DoChart = lazy(() => import("./DoChart").then((m) => ({ default: m.DoChart })));
 
 const WINDOW_MS = 2 * 3_600_000;
-const TONE: Record<Status, string> = {
-  alert: "bg-red-500 text-white",
-  blind: "bg-slate-600 text-slate-100",
-  watch: "bg-amber-400 text-night-950",
-  ok: "bg-emerald-500 text-night-950",
-};
 
 interface Props {
   pond: PondState;
+  incident?: Incident;
   now: number;
   offsetHours: number;
+  demoCode: string;
   onClose: () => void;
 }
 
-export function PondDrawer({ pond, now, offsetHours, onClose }: Props) {
+export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose }: Props) {
   const [detail, setDetail] = useState<PondDetail | null>(null);
   const [history, setHistory] = useState<HistoryPoint[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -83,7 +81,7 @@ export function PondDrawer({ pond, now, offsetHours, onClose }: Props) {
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="font-mono text-xl font-semibold text-white">{pond._id}</h2>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${TONE[status]}`}>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${BADGE[status]}`}>
               {STATUS_LABEL[status]}
             </span>
           </div>
@@ -116,7 +114,9 @@ export function PondDrawer({ pond, now, offsetHours, onClose }: Props) {
         <Stat label="Last data" value={seen == null ? "–" : ago(seen)} unit="ago" tone={seen != null && seen > 60 ? "text-slate-400" : ""} />
       </dl>
 
-      {status !== "ok" && (
+      {incident && <IncidentPanel incident={incident} offsetHours={offsetHours} demoCode={demoCode} />}
+
+      {status !== "ok" && !incident?.open && (
         <ul className="flex flex-wrap gap-2 border-b border-night-700 px-5 py-3 text-xs">
           {reasons(pond, status, now).map((reason) => (
             <li key={reason} className="rounded-full bg-night-800 px-2.5 py-1 text-slate-200 ring-1 ring-night-700">
