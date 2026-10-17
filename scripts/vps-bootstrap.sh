@@ -29,6 +29,22 @@ ufw allow 443/tcp
 ufw --force enable
 
 systemctl enable --now fail2ban
+
+# An openssh upgrade restarts ssh.service, and on Ubuntu 24.04 the restart deleted /run/sshd: every
+# new login then failed with "chroot(/run/sshd): No such file or directory" until a reboot.
+mkdir -p /etc/systemd/system/ssh.service.d
+printf '[Service]\nRuntimeDirectoryPreserve=yes\n' > /etc/systemd/system/ssh.service.d/10-keep-privsep-dir.conf
+echo 'd /run/sshd 0755 root root -' > /etc/tmpfiles.d/sshd-privsep.conf
+
+# Security updates still install every day, but at 02:00 Vietnam time, not while the demo is watched.
+for timer in apt-daily:18:30 apt-daily-upgrade:19:00; do
+  mkdir -p "/etc/systemd/system/${timer%%:*}.timer.d"
+  printf '[Timer]\nOnCalendar=\nOnCalendar=*-*-* %s\nRandomizedDelaySec=20m\n' "${timer#*:}" \
+    > "/etc/systemd/system/${timer%%:*}.timer.d/10-night.conf"
+done
+systemctl daemon-reload
+systemd-tmpfiles --create /etc/tmpfiles.d/sshd-privsep.conf
+
 mkdir -p /opt/firstlight/infra
 
 docker --version
