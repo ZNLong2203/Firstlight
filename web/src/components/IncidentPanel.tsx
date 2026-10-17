@@ -37,6 +37,8 @@ export function IncidentPanel({ incident, offsetHours, demoCode }: Props) {
 
       <AiPanel incident={incident} />
 
+      {incident.similar && incident.similar.length > 0 && <Similar incident={incident} />}
+
       {evidence.length > 0 && (
         <div>
           <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Evidence</h4>
@@ -146,6 +148,38 @@ function Approvals({ incident, demoCode }: { incident: Incident; demoCode: strin
       </div>
       {!demoCode && <p className="mt-2 text-[11px] text-orange-200/70">Unlock with the demo code in the chaos panel.</p>}
       {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
+    </div>
+  );
+}
+
+/** The closest past incidents from MongoDB's hybrid search: what happened then, and how it ended. */
+function Similar({ incident }: { incident: Incident }) {
+  return (
+    <div>
+      <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        Seen before · vector and text search
+      </h4>
+      <ul className="space-y-1.5">
+        {incident.similar!.map((past) => (
+          <li key={past._id}>
+            <a
+              href={`#${past._id}`}
+              className="block rounded-md bg-night-800 px-2.5 py-1.5 text-xs ring-1 ring-night-700 transition hover:ring-slate-500"
+            >
+              <span className="font-mono text-slate-400">{past._id}</span>
+              <span className="text-slate-200"> · {CAUSE_LABEL[past.cause ?? "unknown"] ?? past.cause} · {past.key}</span>
+              <span className="text-slate-500">
+                {past.status === "dismissed"
+                  ? " · false alarm stopped"
+                  : past.metrics?.mttr_min != null
+                    ? ` · recovered in ${past.metrics.mttr_min} min`
+                    : ""}
+              </span>
+              {past.summary && <span className="mt-0.5 block text-slate-500">{past.summary.slice(0, 160)}</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

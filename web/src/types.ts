@@ -124,6 +124,15 @@ export interface Incident {
   metrics?: IncidentMetrics;
   false_alarm_prevented?: boolean;
   investigation?: Investigation;
+  similar?: {
+    _id: string;
+    key: string;
+    status: string;
+    cause?: string;
+    score: number;
+    metrics?: IncidentMetrics;
+    summary?: string;
+  }[];
   postmortem?: { status: string; title?: string; postmortem_md?: string; follow_ups?: string[] };
   evals?: {
     agrees_with_rules?: boolean;
