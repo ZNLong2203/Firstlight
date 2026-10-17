@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 from tests.conftest import DEMO_CODE
 
-from firstlight.brain.reports import build, dawn_report_due, last_night
+from firstlight.brain.reports import build, current_night, dawn_report_due, last_night
 
 
 def test_last_night_is_the_one_that_ended_at_the_latest_dawn() -> None:
@@ -16,6 +16,13 @@ def test_last_night_is_the_one_that_ended_at_the_latest_dawn() -> None:
     )
     # 05:00 local, before dawn: the night before is the last one that ended.
     assert last_night(datetime(2026, 10, 17, 22, 0, tzinfo=UTC), 7)[2] == "2026-10-17"
+
+
+def test_the_current_night_runs_from_dusk_to_dawn_on_the_farm_clock() -> None:
+    dusk, dawn = datetime(2026, 10, 17, 11, 0, tzinfo=UTC), datetime(2026, 10, 17, 23, 0, tzinfo=UTC)
+    assert current_night(datetime(2026, 10, 17, 15, 37, tzinfo=UTC), 7) == (dusk, dawn)  # 22:37, tonight
+    assert current_night(datetime(2026, 10, 17, 20, 0, tzinfo=UTC), 7) == (dusk, dawn)  # 03:00, still tonight
+    assert current_night(datetime(2026, 10, 18, 3, 0, tzinfo=UTC), 7) == (dusk, dawn)  # 10:00, last night
 
 
 async def test_the_dawn_report_counts_the_night_once(api: tuple[httpx.AsyncClient, Any]) -> None:

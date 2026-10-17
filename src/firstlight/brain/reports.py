@@ -30,6 +30,16 @@ def last_night(now: datetime, offset_hours: float) -> tuple[datetime, datetime, 
     return dawn - timedelta(hours=NIGHT_HOURS) - offset, dawn - offset, dawn.date().isoformat()
 
 
+def current_night(now: datetime, offset_hours: float) -> tuple[datetime, datetime]:
+    """The night in progress, 18:00 to 06:00 on the farm clock, or by day the one that ended at dawn."""
+    offset = timedelta(hours=offset_hours)
+    local = now + offset
+    dusk = local.replace(hour=DAWN_HOUR + NIGHT_HOURS, minute=0, second=0, microsecond=0)
+    if local < dusk:
+        dusk -= timedelta(days=1)
+    return dusk - offset, dusk + timedelta(hours=NIGHT_HOURS) - offset
+
+
 def pond_minutes_pipeline(start: datetime, end: datetime) -> list[Doc]:
     """For each pond over the night: its lowest DO, and how many minutes it spent under 4 mg/L."""
     return [

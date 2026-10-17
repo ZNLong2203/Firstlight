@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pymongo.asynchronous.database import AsyncDatabase
 
 from firstlight import __version__
+from firstlight.brain.reports import current_night
 from firstlight.core import economics
 from firstlight.core.config import get_settings
 
@@ -33,6 +34,8 @@ POND_FIELDS = (
 )
 PROJECTION = dict.fromkeys(POND_FIELDS, 1)
 RECENT_INCIDENTS = 20
+NIGHT_STEP_MIN = 10
+NIGHT_CACHE_S = 60
 RECONNECT = "reconnect"  # queued for a console that fell behind: its stream ends and it starts over
 HEARTBEAT_S = 10
 
@@ -158,6 +161,51 @@ async def meta() -> dict[str, Any]:
         "env": settings.dd_env,
         "farm_clock_offset_hours": settings.sim_farm_clock_offset_hours,
     }
+
+
+def night_pipeline(start: datetime, end: datetime) -> list[dict[str, Any]]:
+    """The whole estate every 10 minutes: the lowest reading of any pond, and the 10th percentile and the
+    median of the ponds' one-minute averages."""
+    return [
+        {"$match": {"minute": {"$gte": start, "$lt": end}}},
+        {
+            "$group": {
+                "_id": {"$dateTrunc": {"date": "$minute", "unit": "minute", "binSize": NIGHT_STEP_MIN}},
+                "min": {"$min": "$do_min"},
+                "p10": {"$percentile": {"input": "$do_avg", "p": [0.1], "method": "approximate"}},
+                "median": {"$median": {"input": "$do_avg", "method": "approximate"}},
+            }
+        },
+        {"$sort": {"_id": 1}},
+        {
+            "$project": {
+                "_id": 0,
+                "t": "$_id",
+                "min": {"$round": ["$min", 2]},
+                "p10": {"$round": [{"$first": "$p10"}, 2]},
+                "median": {"$round": ["$median", 2]},
+            }
+        },
+    ]
+
+
+_night: dict[str, Any] = {}  # the last answer, shared by every console for a minute
+
+
+@router.get("/night")
+async def night(request: Request) -> dict[str, Any]:
+    """Tonight's oxygen so far across the estate, or last night's by day, from the minute rollups. The
+    rollups change once a minute, so the answer is computed at most once a minute, however many consoles
+    ask."""
+    now = datetime.now(UTC)
+    fresh = now - _night.get("at", datetime.min.replace(tzinfo=UTC)) < timedelta(seconds=NIGHT_CACHE_S)
+    if fresh and _night.get("db") == request.app.state.db.name:
+        return dict(_night["body"])
+    start, end = current_night(now, get_settings().sim_farm_clock_offset_hours)
+    rows = await (await request.app.state.db.readings_1m.aggregate(night_pipeline(start, end))).to_list()
+    body = {"start": start, "end": end, "step_min": NIGHT_STEP_MIN, "buckets": rows}
+    _night.update(db=request.app.state.db.name, at=now, body=body)
+    return body
 
 
 @router.get("/ponds")

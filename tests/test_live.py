@@ -7,6 +7,7 @@ import httpx
 
 from firstlight.api.app import app
 from firstlight.api.live import RECONNECT, Hub
+from firstlight.brain.reports import current_night
 
 
 def test_hub_coalesces_and_drops_stuck_consoles() -> None:
@@ -75,6 +76,28 @@ async def test_ponds_and_history(api: tuple[httpx.AsyncClient, Any]) -> None:
     assert [r["do"] for r in rows] == [2.0, 3.0, 4.0] and rows[0]["ts"] < rows[-1]["ts"]
     assert (await client.get("/v1/ponds/nope")).status_code == 404
     assert (await client.get("/v1/meta")).json()["farm_clock_offset_hours"] == 7.0
+
+
+async def test_the_night_curve_steps_through_the_minute_rollups(api: tuple[httpx.AsyncClient, Any]) -> None:
+    client, db = api
+    start, end = current_night(datetime.now(UTC), 7.0)
+    await db.readings_1m.insert_many(
+        [
+            {
+                "minute": start + timedelta(minutes=m),
+                "meta": {"farm": "BL-01", "pond": pond, "gateway": "g"},
+                "do_avg": do,
+                "do_min": do - 0.2,
+            }
+            for m in (0, 5, 12)
+            for pond, do in (("BL-01-A1", 5.0), ("BL-01-A2", 4.0))
+        ]
+    )
+    body = (await client.get("/v1/night")).json()
+    assert datetime.fromisoformat(body["start"]) == start and datetime.fromisoformat(body["end"]) == end
+    first, second = body["buckets"]  # minutes 0 and 5 share the first ten minutes; 12 starts the next
+    assert first["min"] == 3.8 and first["p10"] == 4.0 and 4.0 <= first["median"] <= 5.0
+    assert datetime.fromisoformat(second["t"]) == start + timedelta(minutes=10)
 
 
 def test_hub_sends_each_kind_as_its_own_event() -> None:

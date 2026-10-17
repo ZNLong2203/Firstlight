@@ -262,6 +262,21 @@ db.readings_1m.insertMany(rows, { ordered: false })
 
 `start` is the minute after the newest row already stored, or the first reading after it, so a stretch without data is skipped. `end` is the last complete minute, at most an hour later. A brain that was down therefore catches up an hour per cycle instead of leaving a hole, and nothing is rolled up twice. The hourly rollups are small enough for a regular collection, so they use `$merge` from `readings_1m` into `readings_1h`.
 
+### How is the night going across the estate?
+
+The console's night curve: every ten minutes since dusk, the lowest reading of any pond, and the 10th percentile and median of the ponds' minute averages. It runs over the minute rollups with `$percentile` and `$median`, and takes about 120 ms for a night of 200 ponds. The API computes it at most once a minute, however many consoles ask.
+
+```js
+db.readings_1m.aggregate([
+  { $match: { minute: { $gte: dusk, $lt: dawn } } },
+  { $group: { _id: { $dateTrunc: { date: "$minute", unit: "minute", binSize: 10 } },
+      min:    { $min: "$do_min" },
+      p10:    { $percentile: { input: "$do_avg", p: [0.1], method: "approximate" } },
+      median: { $median: { input: "$do_avg", method: "approximate" } } } },
+  { $sort: { _id: 1 } }
+])
+```
+
 ### Have we seen this before?
 
 Hybrid search: vector similarity and keyword relevance, merged with Reciprocal Rank Fusion. `$rankFusion` is not enabled on 8.0, so the fusion is written with `$unionWith`, which runs on any 8.0 deployment:
