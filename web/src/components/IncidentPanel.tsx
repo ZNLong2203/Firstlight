@@ -3,6 +3,7 @@ import { useState } from "react";
 import { demoFetch } from "../demo";
 import { CAUSE_LABEL, clockName, clockTime, describe, seconds } from "../format";
 import { INCIDENT_BADGE, INCIDENT_LABEL } from "../status";
+import { AiPanel } from "./AiPanel";
 import type { Incident } from "../types";
 
 interface Props {
@@ -33,6 +34,8 @@ export function IncidentPanel({ incident, offsetHours, demoCode }: Props) {
       {incident.status === "awaiting_approval" && <Approvals incident={incident} demoCode={demoCode} />}
 
       {incident.metrics && <Proof incident={incident} />}
+
+      <AiPanel incident={incident} />
 
       {evidence.length > 0 && (
         <div>

@@ -123,6 +123,39 @@ export interface Incident {
   approvals?: { action: string; status: string }[];
   metrics?: IncidentMetrics;
   false_alarm_prevented?: boolean;
+  investigation?: Investigation;
+  postmortem?: { status: string; title?: string; postmortem_md?: string; follow_ups?: string[] };
+  evals?: {
+    agrees_with_rules?: boolean;
+    grounded?: number;
+    farmer_message_ok?: boolean;
+    truth?: string;
+    rca_correct?: boolean;
+    rules_correct?: boolean;
+  };
+}
+
+export interface Investigation {
+  status: "running" | "done" | "failed";
+  cause?: string;
+  confidence?: number;
+  summary?: string;
+  farmer_message_vi?: string;
+  next_steps?: string[];
+  model?: string;
+  rounds?: number;
+  tool_calls?: { tool: string; args: Record<string, unknown> }[];
+  latency_ms?: number;
+}
+
+export interface AiStats {
+  investigated: number;
+  agrees?: number;
+  grounded?: number;
+  message_ok?: number;
+  scored?: number;
+  ai_correct?: number;
+  rules_correct?: number;
 }
 
 export interface Fault {

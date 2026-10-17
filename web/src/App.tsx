@@ -9,7 +9,7 @@ import { TopBar } from "./components/TopBar";
 import { useDemoCode } from "./demo";
 import { effectiveStatus } from "./format";
 import { LEGEND } from "./status";
-import type { Incident, Meta } from "./types";
+import type { AiStats, Incident, Meta } from "./types";
 import { useLivePonds, useNow } from "./useLive";
 
 const RECENT_MS = 60 * 60_000; // a pond's drawer keeps showing its last incident for an hour
@@ -42,6 +42,22 @@ function useSelectedPond(): [string | null, (id: string | null) => void] {
   return [selected, select];
 }
 
+/** How the AI investigator scores so far; refreshed every 30 s. */
+function useAiStats(): AiStats | null {
+  const [stats, setStats] = useState<AiStats | null>(null);
+  useEffect(() => {
+    const load = () =>
+      fetch("/v1/incidents/ai/stats")
+        .then((r) => (r.ok ? (r.json() as Promise<AiStats>) : null))
+        .then(setStats)
+        .catch(() => undefined);
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  return stats;
+}
+
 function useMeta(): Meta | null {
   const [meta, setMeta] = useState<Meta | null>(null);
   useEffect(() => {
@@ -57,6 +73,7 @@ export function App() {
   const { ponds, incidents, link } = useLivePonds();
   const now = useNow();
   const meta = useMeta();
+  const aiStats = useAiStats();
   const [demoCode, setDemoCode] = useDemoCode();
   const [selected, select] = useSelectedPond();
   const list = useMemo(() => [...ponds.values()], [ponds]);
@@ -102,6 +119,7 @@ export function App() {
                 offsetHours={offset ?? 0}
                 selected={selected}
                 onSelect={toggle}
+                aiStats={aiStats}
               />
             </section>
             <section aria-labelledby="fleet-title">

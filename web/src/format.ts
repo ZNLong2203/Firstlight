@@ -156,6 +156,8 @@ export function describe(entry: TimelineEntry): string {
       return `${text("action")} approved`;
     case "no_standby":
       return "No standby aerator left to start";
+    case "ai_investigation":
+      return `AI investigator: ${CAUSE_LABEL[text("cause")] ?? text("cause")}${entry.agrees ? ", agrees with the rules" : ", disagrees with the rules"}`;
     case "datadog": {
       const after = entry.after_brain_s != null ? `, ${text("after_brain_s")} s after Firstlight` : "";
       return `Datadog ${text("transition")}: ${text("monitor")}${after}`;

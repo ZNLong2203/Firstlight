@@ -1,6 +1,6 @@
 import { CAUSE_LABEL, clockTime, describe, effectiveStatus, headline, perHour, reasons, seconds, target, urgency } from "../format";
 import { BADGE, CARD, INCIDENT_BADGE, INCIDENT_CARD, INCIDENT_LABEL, INCIDENT_ORDER, STATUS_LABEL } from "../status";
-import { PROVINCES, type Incident, type PondState } from "../types";
+import { PROVINCES, type AiStats, type Incident, type PondState } from "../types";
 
 const SHOWN = 8;
 
@@ -11,10 +11,11 @@ interface Props {
   offsetHours: number;
   selected: string | null;
   onSelect: (id: string) => void;
+  aiStats?: AiStats | null;
 }
 
 /** Open incidents first, then ponds that need watching on their own, then the proof from the latest incidents. */
-export function Attention({ ponds, incidents, now, offsetHours, selected, onSelect }: Props) {
+export function Attention({ ponds, incidents, now, offsetHours, selected, onSelect, aiStats }: Props) {
   const all = [...incidents.values()];
   const open = all
     .filter((i) => i.open)
@@ -89,7 +90,7 @@ export function Attention({ ponds, incidents, now, offsetHours, selected, onSele
       {loose.length > SHOWN - open.length && (
         <p className="text-xs text-slate-500">and {loose.length - Math.max(0, SHOWN - open.length)} more on the map below</p>
       )}
-      {closed.length > 0 && <Closed incidents={closed} offsetHours={offsetHours} onSelect={onSelect} />}
+      {closed.length > 0 && <Closed incidents={closed} offsetHours={offsetHours} onSelect={onSelect} aiStats={aiStats} />}
     </div>
   );
 }
@@ -154,14 +155,25 @@ function Closed({
   incidents,
   offsetHours,
   onSelect,
+  aiStats,
 }: {
   incidents: Incident[];
   offsetHours: number;
   onSelect: (id: string) => void;
+  aiStats?: AiStats | null;
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Closed recently · the proof</h3>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Closed recently · the proof</h3>
+        {aiStats && (aiStats.scored ?? 0) > 0 && (
+          <p className="text-[11px] text-slate-400">
+            Right by the ground truth: <span className="font-mono text-sky-300">AI {aiStats.ai_correct}/{aiStats.scored}</span>
+            {" · "}
+            <span className="font-mono text-emerald-300">rules {aiStats.rules_correct}/{aiStats.scored}</span>
+          </p>
+        )}
+      </div>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2">
         {incidents.map((incident) => {
           return (
