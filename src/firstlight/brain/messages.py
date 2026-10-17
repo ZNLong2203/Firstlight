@@ -54,6 +54,13 @@ def notify(
         )
     if cause == "ingest_regression":
         count = len(incident.get("ponds", []))
+        release = diagnosis.get("release") or {}
+        if release:
+            back = f" Đề xuất: rollback về {release['previous']}." if release.get("previous") else ""
+            return (
+                f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}, ngay sau khi firstlight-api "
+                f"{release['version']} được deploy lúc {clock(release['started_at'], offset_hours)}.{back}"
+            )
         return f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}. Kiểm tra bản deploy gần nhất."
     return f"Ao {pond}: oxy {mg(do_now)} mg/L, chưa rõ nguyên nhân. Cần kiểm tra ao."
 

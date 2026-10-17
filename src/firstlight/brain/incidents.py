@@ -28,6 +28,7 @@ from firstlight.brain.evidence import (
     diagnose,
     pond_checks,
     pond_readings,
+    recent_release,
 )
 from firstlight.brain.forecast import HYPOXIA_MGL, SAFE_MGL, TURNING_AMPS
 from firstlight.core.metrics import Metrics
@@ -193,7 +194,18 @@ async def investigate(
     scope_states = [by_id[p] for p in incident["ponds"] if p in by_id]
     rows: list[Doc] = []
     if incident["scope"] in ("gateway", "estate") or all(_stale(s, now) for s in scope_states):
-        evidence = data_path_checks(scope_states, states, now)
+        releases = (
+            await db.deployments.find({"service": "firstlight-api"})
+            .sort("started_at", -1)
+            .limit(10)
+            .to_list()
+        )
+        evidence = data_path_checks(scope_states, states, now, releases)
+        diagnosis = diagnose(evidence)
+        if diagnosis.cause == "ingest_regression":
+            silent_from = (incident.get("at_detection") or {}).get("last_seen")
+            diagnosis.release = recent_release(releases, silent_from)
+        return evidence, diagnosis, rows
     else:
         rows = await pond_readings(db, incident["ponds"][0], now)
         farm_ponds = [s for s in states if s.get("farm") == incident.get("farm")]

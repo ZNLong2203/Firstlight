@@ -42,6 +42,7 @@ class Diagnosis:
     onset: datetime | None = None
     device: str | None = None
     scores: dict[str, float] = field(default_factory=dict)
+    release: dict[str, Any] | None = None  # the deployment an ingest regression points at
 
     def doc(self) -> dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -205,10 +206,31 @@ def pond_checks(
     return evidence
 
 
+RELEASE_WINDOW = timedelta(minutes=15)
+
+
+def recent_release(releases: list[dict[str, Any]], silent_from: datetime | None) -> dict[str, Any] | None:
+    """The API release that started shortly before the data stopped, with the version it replaced."""
+    if silent_from is None:
+        return None
+    for i, release in enumerate(releases):  # newest first
+        started = release["started_at"]
+        if started <= silent_from and silent_from - started <= RELEASE_WINDOW:
+            previous = next(
+                (r["version"] for r in releases[i + 1 :] if r["version"] != release["version"]), None
+            )
+            return {"version": release["version"], "previous": previous, "started_at": started}
+    return None
+
+
 def data_path_checks(
-    scope_ponds: list[dict[str, Any]], all_ponds: list[dict[str, Any]], now: datetime
+    scope_ponds: list[dict[str, Any]],
+    all_ponds: list[dict[str, Any]],
+    now: datetime,
+    releases: list[dict[str, Any]] | None = None,
 ) -> list[Evidence]:
-    """Is the data missing because of one gateway, or because the backend stopped taking it?"""
+    """Is the data missing because of one gateway, or because the backend stopped taking it?
+    `releases` are the API's recent deployments, newest first."""
 
     def stale(p: dict[str, Any]) -> bool:
         last = p.get("last")
@@ -244,6 +266,20 @@ def data_path_checks(
         evidence.append(
             Evidence("fleet_silent", "gateway_offline", "against", 0.4, "too many gateways at once")
         )
+        release = recent_release(releases or [], last_seen)
+        if release and last_seen:
+            lead = (last_seen - release["started_at"]).total_seconds()
+            evidence.append(
+                Evidence(
+                    "release",
+                    "ingest_regression",
+                    "support",
+                    0.35,
+                    f"firstlight-api {release['version']} started {lead:.0f} s before the data stopped"
+                    + (f"; it replaced {release['previous']}" if release["previous"] else ""),
+                    release["started_at"],
+                )
+            )
     else:
         evidence.append(
             Evidence(

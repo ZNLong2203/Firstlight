@@ -26,9 +26,9 @@ class Harness:
     """Two farms on a fast clock. Stands in for the gateways' command channels by running pending
     commands after every tick and acknowledging them through the real API."""
 
-    def __init__(self, client: httpx.AsyncClient, db: Any) -> None:
+    def __init__(self, client: httpx.AsyncClient, db: Any, farms: int = 2) -> None:
         self.client, self.db = client, db
-        self.farms = build_farms(2, 4)
+        self.farms = build_farms(farms, 4)
         self.gateways = [Gateway(farm) for farm in self.farms]
         self.world = World(self.farms, self.gateways)
         self.rng = random.Random(11)
@@ -225,3 +225,29 @@ def test_diagnosis_weighs_evidence_for_and_against() -> None:
     diagnosis = diagnose(evidence)
     assert diagnosis.cause == "power_outage" and diagnosis.confidence == 0.64
     assert diagnose([]).cause == "unknown"
+
+
+async def test_backend_regression_is_traced_to_the_release_that_caused_it(
+    api: tuple[httpx.AsyncClient, Any],
+) -> None:
+    client, db = api
+    harness = Harness(client, db, farms=5)
+    await harness.start()
+    releases = [("1.3", harness.now - timedelta(hours=2)), ("1.4", harness.now)]
+    await db.deployments.insert_many(
+        [{"service": "firstlight-api", "version": v, "started_at": t, "config": {}} for v, t in releases]
+    )
+    # What release 1.4 does to ingest, seen from outside: most gateways stop getting their batches in.
+    for gateway in list(harness.world.gateways.values())[:4]:
+        gateway.online = False
+    monitoring = await harness.until("estate", "monitoring", limit=10)
+    diagnosis = monitoring["diagnosis"]
+    assert monitoring["scope"] == "estate" and diagnosis["cause"] == "ingest_regression"
+    assert diagnosis["release"]["version"] == "1.4" and diagnosis["release"]["previous"] == "1.3"
+    message = next(e["text"] for e in monitoring["timeline"] if e["kind"] == "notify")
+    assert "1.4" in message and "rollback về 1.3" in message
+
+    for gateway in harness.world.gateways.values():  # rolled back: the batches get in again
+        gateway.online = True
+    resolved = await harness.until("estate", "resolved", limit=6)
+    assert resolved["metrics"]["coverage"] >= 0.95
