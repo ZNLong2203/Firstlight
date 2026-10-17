@@ -144,7 +144,7 @@ async def _investigate(
     contents = [types.Content(role="user", parts=[types.Part(text=question)])]
     calls_made: list[dict[str, Any]] = []
     seen: set[str] = set()
-    spent: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+    spent: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0}
     report: dict[str, Any] = {}
     model = ""
     rounds = 0

@@ -72,7 +72,12 @@ class Gemini:
 
 
 def usage(response: types.GenerateContentResponse) -> dict[str, Any]:
+    """Tokens billed for one call. Thinking is billed at the output rate but counted apart from it."""
     meta = response.usage_metadata
     if meta is None:
         return {}
-    return {"input_tokens": meta.prompt_token_count, "output_tokens": meta.candidates_token_count}
+    return {
+        "input_tokens": meta.prompt_token_count or 0,
+        "output_tokens": meta.candidates_token_count or 0,
+        "thinking_tokens": meta.thoughts_token_count or 0,
+    }
