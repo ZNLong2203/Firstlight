@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     sim_farms: int = 50
     sim_ponds_per_farm: int = 4
     sim_batch_seconds: int = 10
-    # Farm clock = UTC + offset. -5 puts 02:00 on the farm at 14:00 in Vietnam, in time for an afternoon demo.
-    sim_farm_clock_offset_hours: float = -5.0
+    # Farm clock = UTC + offset: Vietnam time. The simulated ponds follow the real day and night there.
+    sim_farm_clock_offset_hours: float = 7.0
 
     # A pond counts as recovered after DO stays at or above 4 mg/L, not falling, for this long.
     # Two minutes keeps a live demo moving; a farm would use ten.

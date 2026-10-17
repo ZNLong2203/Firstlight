@@ -1,6 +1,6 @@
 # Incident scenarios
 
-> **Status:** scenarios 1, 2, 4 and 5 run on the demo host. The numbers below were measured there on 17 October 2026; times are on the farm clock. Scenario 3 is designed but not built yet. Datadog monitors join when the trial is active. Until then the brain detects every incident itself, which is also how it behaves when Datadog, or the network to it, is down.
+> **Status:** scenarios 1, 2, 4 and 5 run on the demo host. The numbers below were measured there on 17 October 2026. During these runs the simulated farms ran 12 hours behind Vietnam time, so that an afternoon demo happened in their night: 03:19 in the tables was 15:19 in Vietnam. The console and the simulator now use Vietnam time. Scenario 3 is designed but not built yet. Datadog monitors join when the trial is active. Until then the brain detects every incident itself, which is also how it behaves when Datadog, or the network to it, is down.
 
 Firstlight's demo shows operational incidents from the moment they start to the moment they are resolved. Each one is triggered from the chaos panel and has a **real effect on the running system**: an aerator really stops in the simulator, a gateway's link is really cut, a farm really loses power. The incidents, commands, messages and recovery numbers are therefore the system's own data, not a recording. The pond values themselves are synthetic and come from the simulator's physics model.
 

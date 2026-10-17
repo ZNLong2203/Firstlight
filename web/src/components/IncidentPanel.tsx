@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { demoFetch } from "../demo";
-import { CAUSE_LABEL, clockTime, describe, seconds } from "../format";
+import { CAUSE_LABEL, clockName, clockTime, describe, seconds } from "../format";
 import { INCIDENT_BADGE, INCIDENT_LABEL } from "../status";
 import type { Incident } from "../types";
 
@@ -59,7 +59,9 @@ export function IncidentPanel({ incident, offsetHours, demoCode }: Props) {
       )}
 
       <div>
-        <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Timeline · farm time</h4>
+        <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Timeline · {clockName(offsetHours)}
+        </h4>
         <ol className="relative space-y-2 border-l border-night-700 pl-3">
           {incident.timeline.map((entry, index) => (
             <li key={index} className="text-xs">

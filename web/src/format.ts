@@ -51,9 +51,21 @@ export function perHour(slopePerMin: number | undefined): string {
   return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}`;
 }
 
-/** The farm clock is real time shifted by a fixed offset, so a demo by day can run on a farm at night. */
+export const VIETNAM_UTC_OFFSET = 7;
+
+/** The farm clock: real time at the farms' UTC offset, Vietnam time unless the simulator is shifted. */
 export function farmClock(now: number, offsetHours: number): Date {
   return new Date(now + offsetHours * 3_600_000);
+}
+
+export function clockName(offsetHours: number): string {
+  return offsetHours === VIETNAM_UTC_OFFSET ? "Vietnam time" : "farm time";
+}
+
+/** Minutes until 18:00 on the farm clock during the day, otherwise null. */
+export function minutesToNight(farm: Date): number | null {
+  const minutes = farm.getUTCHours() * 60 + farm.getUTCMinutes();
+  return minutes >= 6 * 60 && minutes < 18 * 60 ? 18 * 60 - minutes : null;
 }
 
 export function hhmm(date: Date): string {

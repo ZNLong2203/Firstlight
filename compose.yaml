@@ -122,7 +122,7 @@ services:
     environment:
       <<: [*datadog-env, *mongo-env]
       DD_SERVICE: firstlight-brain
-      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:--5}
+      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:-7}
       RECOVERY_STABLE_MIN: ${RECOVERY_STABLE_MIN:-2}
       ESCALATE_AFTER_MIN: ${ESCALATE_AFTER_MIN:-10}
       DD_API_KEY: ${DD_API_KEY:-}
@@ -156,7 +156,7 @@ services:
       SIM_FARMS: ${SIM_FARMS:-50}
       SIM_PONDS_PER_FARM: ${SIM_PONDS_PER_FARM:-4}
       SIM_BATCH_SECONDS: ${SIM_BATCH_SECONDS:-10}
-      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:--5}
+      SIM_FARM_CLOCK_OFFSET_HOURS: ${SIM_FARM_CLOCK_OFFSET_HOURS:-7}
     labels:
       com.datadoghq.tags.service: firstlight-edge
       com.datadoghq.tags.env: ${DD_ENV:-local}

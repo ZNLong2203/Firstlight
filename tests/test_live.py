@@ -59,7 +59,7 @@ async def test_ponds_and_history(api: tuple[httpx.AsyncClient, Any]) -> None:
     rows = (await client.get("/v1/ponds/BL-01-A1/history?minutes=30")).json()
     assert len(rows) == 12 and rows[0]["ts"] < rows[-1]["ts"] and rows[0]["running"] == 1
     assert (await client.get("/v1/ponds/nope")).status_code == 404
-    assert (await client.get("/v1/meta")).json()["farm_clock_offset_hours"] == -5.0
+    assert (await client.get("/v1/meta")).json()["farm_clock_offset_hours"] == 7.0
 
 
 def test_hub_sends_each_kind_as_its_own_event() -> None:

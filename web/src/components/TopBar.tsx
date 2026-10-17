@@ -1,10 +1,9 @@
-import { duration, farmClock, hhmm, nightElapsed } from "../format";
+import { clockName, duration, farmClock, hhmm, minutesToNight, nightElapsed, VIETNAM_UTC_OFFSET } from "../format";
 import { DOT, STATUS_LABEL, STATUS_ORDER } from "../status";
 import type { Status } from "../types";
 import type { Link } from "../useLive";
 
 const NIGHT_MINUTES = 12 * 60;
-const VIETNAM_UTC_OFFSET = 7;
 interface Props {
   now: number;
   offsetHours: number | null;
@@ -31,8 +30,13 @@ export function TopBar({ now, offsetHours, counts, link }: Props) {
           <span className="font-mono text-3xl font-semibold tabular-nums text-white">{farm ? hhmm(farm) : "--:--"}</span>
           <span className="flex flex-col text-xs leading-snug">
             <span className="text-slate-300">
-              {!farm ? "farm time" : elapsed === null ? "daytime on the farms" : `dawn in ${duration(NIGHT_MINUTES - elapsed)}`}
+              {!farm
+                ? "farm time"
+                : elapsed === null
+                  ? `daylight · night begins in ${duration(minutesToNight(farm) ?? 0)}`
+                  : `dawn in ${duration(NIGHT_MINUTES - elapsed)}`}
             </span>
+            {farm && offsetHours === VIETNAM_UTC_OFFSET && <span className="text-slate-500">{clockName(offsetHours)}</span>}
             {/* The simulated farms run on a shifted clock so a daytime demo happens during their night. */}
             {farm && offsetHours !== VIETNAM_UTC_OFFSET && (
               <span className="text-slate-500">

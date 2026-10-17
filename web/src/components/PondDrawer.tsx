@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import { ago, effectiveStatus, perHour, reasons } from "../format";
+import { ago, clockName, effectiveStatus, perHour, reasons } from "../format";
 import { BADGE, STATUS_LABEL } from "../status";
 import { PROVINCES, type HistoryPoint, type Incident, type PondDetail, type PondState } from "../types";
 import { IncidentPanel } from "./IncidentPanel";
@@ -135,7 +135,7 @@ export function PondDrawer({ pond, incident, now, offsetHours, demoCode, onClose
 
       <section className="border-b border-night-700 px-3 pt-3">
         <div className="flex items-center justify-between px-2 text-[11px] text-slate-500">
-          <span>Last 2 hours · farm time</span>
+          <span>Last 2 hours · {clockName(offsetHours)}</span>
           <span className="flex items-center gap-3">
             <Key color="bg-sky-300" label="DO" />
             <Key color="bg-orange-400" label="Forecast" />
