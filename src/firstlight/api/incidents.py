@@ -22,6 +22,30 @@ async def incidents(request: Request) -> list[dict[str, Any]]:
     return await recent_incidents(request.app.state.db)
 
 
+@router.get("/ai/stats")
+async def ai_stats(request: Request) -> dict[str, Any]:
+    """How the AI investigator and the rules score, over every incident with a score."""
+    db = request.app.state.db
+    pipeline: list[dict[str, Any]] = [
+        {"$match": {"evals": {"$exists": True}}},
+        {
+            "$group": {
+                "_id": None,
+                "investigated": {"$sum": 1},
+                "agrees": {"$sum": {"$cond": ["$evals.agrees_with_rules", 1, 0]}},
+                "grounded": {"$avg": "$evals.grounded"},
+                "message_ok": {"$sum": {"$cond": ["$evals.farmer_message_ok", 1, 0]}},
+                "scored": {"$sum": {"$cond": [{"$ifNull": ["$evals.truth", False]}, 1, 0]}},
+                "ai_correct": {"$sum": {"$cond": [{"$eq": ["$evals.rca_correct", True]}, 1, 0]}},
+                "rules_correct": {"$sum": {"$cond": [{"$eq": ["$evals.rules_correct", True]}, 1, 0]}},
+            }
+        },
+        {"$project": {"_id": 0}},
+    ]
+    rows = await (await db.incidents.aggregate(pipeline)).to_list()
+    return rows[0] if rows else {"investigated": 0}
+
+
 @router.get("/{incident_id}")
 async def incident(incident_id: str, request: Request) -> dict[str, Any]:
     db = request.app.state.db
