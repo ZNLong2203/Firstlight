@@ -1,6 +1,6 @@
 # Incident scenarios
 
-> **Status:** scenarios 1, 2, 4 and 5 run on the demo host. The numbers below were measured there on 17 October 2026. During these runs the simulated farms ran 12 hours behind Vietnam time, so that an afternoon demo happened in their night: 03:19 in the tables was 15:19 in Vietnam. The console and the simulator now use Vietnam time. Scenario 3 is designed but not built yet. Datadog monitors join when the trial is active. Until then the brain detects every incident itself, which is also how it behaves when Datadog, or the network to it, is down.
+> **Status:** scenarios 1, 2, 4 and 5 run on the demo host. The numbers below were measured there on 17 October 2026. During these runs the simulated farms ran 12 hours behind Vietnam time, so that an afternoon demo happened in their night: 03:19 in the tables was 15:19 in Vietnam. The console and the simulator now use Vietnam time. Scenario 3 is built and covered by the test suite, but has not been run on the demo host yet. Datadog monitors join when the trial is active. Until then the brain detects every incident itself, which is also how it behaves when Datadog, or the network to it, is down.
 
 Firstlight's demo shows operational incidents from the moment they start to the moment they are resolved. Each one is triggered from the chaos panel and has a **real effect on the running system**: an aerator really stops in the simulator, a gateway's link is really cut, a farm really loses power. The incidents, commands, messages and recovery numbers are therefore the system's own data, not a recording. The pond values themselves are synthetic and come from the simulator's physics model.
 
@@ -12,7 +12,7 @@ Firstlight's demo shows operational incidents from the moment they start to the 
 |---|---|---|---|---|---|---|---|
 | 1 | Aerator failure | Pond | the pond's largest aerator stops drawing current | `aerator_failure` | standby aerator on (auto) | 5 s | measured |
 | 2 | Fouled DO probe | Sensor | biofilm builds on the probe; the water stays healthy | `sensor_fault` | nobody woken; cleaning ticket | 27 s | measured |
-| 3 | Slow ingest after a deploy | Data path (backend) | deploy `firstlight-api` v1.4, whose ingest query skips an index | `ingest_regression` | roll back to v1.3 | | planned |
+| 3 | Slow ingest after a deploy | Data path (backend) | release `firstlight-api` 1.4, whose new duplicate check scans `ingest_batches` on every batch | `ingest_regression` | message the engineer to roll back to 1.3 | | built, tested |
 | 4 | Gateway offline | Data path (edge) | the gateway's 4G link is cut | `gateway_offline` | mark ponds blind; dispatch; check the gap | 64 s | measured |
 | 5 | Farm power cut | Pond | every aerator on one farm stops at once | `power_outage` | generator, once a person approves | 10 s | measured |
 
@@ -54,11 +54,21 @@ Measured run, incident INC-0007, pond BT-03-A4:
 
 An earlier run, before the 3-minute rate signal existed, needed 90 s and only caught the probe once it read 3.6 mg/L.
 
-## 3. Slow ingest after a deploy (planned)
+## 3. Slow ingest after a deploy
 
-| What happens | What Firstlight sees | Outcome |
-|---|---|---|
-| `firstlight-api` v1.4 is deployed with an ingest query that does not use the `{meta.pond, ts}` index. Ingest p95 climbs, gateways start buffering, and 30 ponds turn **blind**. | Gateway traces show requests arriving but slow, so this is not a 4G problem. Deployment Tracking places the jump exactly at v1.4. The MongoDB span shows a collection scan, and `explain()` confirms it. | Diagnosis `ingest_regression`. Roll back to v1.3; p95 returns to normal. Gateways flush their buffers, the gap check confirms every slot arrived, and no pond incident was missed while blind. |
+`scripts/release.sh 1.4 --regression` starts `firstlight-api` 1.4, and only the API container is recreated. The release adds a duplicate check based on the rule "a gateway never sends the same sequence number twice". The check looks up `ingest_batches` by `{gateway, seq}`, and no index covers that. Every batch therefore pays for a collection scan of a day of batches: `explain()` measured about 150 ms over 283,000 documents. Once ingest is slow enough for gateways to time out, they buffer, and ponds across the fleet turn **blind**. The run on the demo host will show how quickly that happens.
+
+| What Firstlight sees | Where |
+|---|---|
+| More than half the gateways are silent at once, so the backend is at fault, not the 4G links (+0.7). | `pond_state` freshness |
+| `firstlight-api` 1.4 started shortly before the data stopped, replacing 1.3 (+0.35). | `deployments`, written by the API on every start |
+| With Datadog: ingest latency by `version` next to the deployment marker, and a MongoDB span showing the collection scan. | APM, Deployment Tracking |
+
+The diagnosis is `ingest_regression`, an estate-wide incident. The engineer gets a message proposing to roll back to 1.3, which is one command: `scripts/release.sh 1.3`. The gateways then flush their buffers, and the gap check shows how much of the blind spell their backlog covered.
+
+The test suite covers both halves:
+- release 1.4's check finds duplicates by gateway and sequence;
+- a fleet that goes silent just after a release is traced to that release and the version it replaced.
 
 This scenario is a software incident in Firstlight itself, so every signal in it comes straight from the running system.
 
