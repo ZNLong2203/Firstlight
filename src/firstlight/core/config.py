@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash"
     gemini_embed_model: str = "gemini-embedding-2"
+    # Vertex AI (Gemini on Google Cloud) instead of the Gemini Developer API, which refuses some hosting
+    # IPs by location. Either an express-mode API key in GEMINI_API_KEY, or a service account (base64 JSON).
+    gemini_vertex: bool = False
+    google_cloud_project: str = ""
+    google_cloud_location: str = "asia-southeast1"
+    google_service_account_b64: str = ""
 
     webhook_secret: str = ""
     gateway_token: str = ""

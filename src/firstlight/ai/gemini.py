@@ -1,10 +1,13 @@
 """One Gemini client per process, falling back to a second model when the first is unavailable."""
 
+import base64
+import json
 import logging
 from typing import Any
 
 from google import genai
 from google.genai import errors, types
+from google.oauth2 import service_account
 
 from firstlight.core.config import Settings
 
@@ -13,12 +16,30 @@ log = logging.getLogger("firstlight.ai.gemini")
 RETRYABLE = {404, 429, 500, 503}  # model missing or overloaded: the fallback may still answer
 
 
+def make_client(settings: Settings) -> genai.Client | None:
+    """The Gemini Developer API by default; Vertex AI with an express-mode key or a service account."""
+    if not settings.gemini_vertex:
+        return genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+    if settings.google_service_account_b64:
+        info = json.loads(base64.b64decode(settings.google_service_account_b64))
+        credentials = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
+            info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        return genai.Client(
+            vertexai=True,
+            project=settings.google_cloud_project or info.get("project_id"),
+            location=settings.google_cloud_location,
+            credentials=credentials,
+        )
+    return genai.Client(vertexai=True, api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+
+
 class Gemini:
     def __init__(self, settings: Settings) -> None:
-        self.enabled = bool(settings.gemini_api_key)
         self.models = [m for m in (settings.gemini_model, settings.gemini_fallback_model) if m]
         self.embed_model = settings.gemini_embed_model
-        self._client = genai.Client(api_key=settings.gemini_api_key) if self.enabled else None
+        self._client = make_client(settings)
+        self.enabled = self._client is not None
 
     async def generate(
         self, contents: list[types.Content], config: types.GenerateContentConfig
