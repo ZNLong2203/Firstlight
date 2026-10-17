@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+#  Private — never pushed. The repo goes public; these do not.
+# ─────────────────────────────────────────────────────────────
+/private/
+*.private.md
+
+# ─── Secrets ─────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ─── Node ────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# ─── Editor / OS ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ─── Logs / media ────────────────────────────────────────────
+*.log
+*.mp4
+*.mov
+
+# ─── Local agent tooling ─────────────────────────────────────
+/.claude/worktrees/
+.claude/settings.local.json
