@@ -20,6 +20,8 @@ x-datadog-env: &datadog-env
   DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
   DD_LOGS_INJECTION: "true"
   DD_RUNTIME_METRICS_ENABLED: ${DD_TRACE_ENABLED:-false}
+  # Each MongoDB command carries its trace in a comment, so Database Monitoring links a query to its trace.
+  DD_DBM_PROPAGATION_MODE: full
 
 x-mongo-env: &mongo-env
   # Empty MONGODB_URI means the MongoDB container on this host (profile localdb).
@@ -85,6 +87,22 @@ services:
       DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
       DD_LOGS_ENABLED: "true"
       DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "false"
+      # The `datadog` MongoDB user's password (scripts/datadog-dbm.sh), read by the check below.
+      DD_MONGO_PASSWORD: ${DD_MONGO_PASSWORD:-}
+    # Database Monitoring for the MongoDB next to it. The check is declared on the Agent itself, so turning it
+    # on never restarts the database, and the password comes from the Agent's environment, never a file.
+    labels:
+      com.datadoghq.ad.checks: >-
+        {"mongo": {"init_config": {}, "instances": [{
+        "hosts": ["mongo:27017"], "username": "datadog", "password": "%%env_DD_MONGO_PASSWORD%%",
+        "options": {"authSource": "admin"},
+        "dbm": true, "cluster_name": "firstlight-${DD_ENV:-local}",
+        "reported_database_hostname": "firstlight-mongo-${DD_ENV:-local}",
+        "database_autodiscovery": {"enabled": true},
+        "query_metrics": {"enabled": true},
+        "additional_metrics": ["metrics.commands", "tcmalloc", "top", "collection"],
+        "collections_indexes_stats": true,
+        "tags": ["service:firstlight-mongo", "env:${DD_ENV:-local}"]}]}}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/:/host/proc/:ro
@@ -111,6 +129,7 @@ services:
       DEMO_CODE: ${DEMO_CODE:-}
       EDGE_CONTROL_URL: http://edge:9000  # the simulator's control port, never published
       INGEST_DUPLICATE_CHECK: ${INGEST_DUPLICATE_CHECK:-id}  # "fields" is release 1.4's regression
+      MONGODB_QUERY_STATS_RATE: ${MONGODB_QUERY_STATS_RATE:-0}  # 1 samples every query for DBM query metrics
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}

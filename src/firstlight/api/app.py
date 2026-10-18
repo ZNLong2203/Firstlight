@@ -23,7 +23,7 @@ from firstlight.api.live import Hub, flush_every_second, watch
 from firstlight.api.live import router as live_router
 from firstlight.core.config import Settings, get_settings
 from firstlight.core.metrics import Metrics
-from firstlight.core.mongo import database, make_client
+from firstlight.core.mongo import database, make_client, sample_query_stats
 from firstlight.core.schema import ensure_schema
 from firstlight.core.telegram import Telegram
 
@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.metrics = Metrics(settings)
     try:
         await ensure_schema(app.state.db)
+        await sample_query_stats(app.state.mongo, settings.mongodb_query_stats_rate)
         await record_deployment(app.state.db, settings)
     except Exception:
         logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")

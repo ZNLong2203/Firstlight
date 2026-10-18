@@ -63,6 +63,49 @@
     },
     {
       "definition": {
+        "type": "timeseries",
+        "title": "Gemini tokens, by model",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:ml_obs.span.llm.input.tokens{$env,ml_app:firstlight-investigator} by {model_name}.as_count()",
+            "display_type": "bars"
+          },
+          {
+            "q": "sum:ml_obs.span.llm.output.tokens{$env,ml_app:firstlight-investigator} by {model_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Gemini cost, USD (LLM Observability estimate)",
+        "requests": [
+          {
+            "q": "sum:ml_obs.span.llm.total.cost{$env,ml_app:firstlight-investigator}.as_count() / 1000000000",
+            "aggregator": "sum"
+          }
+        ],
+        "precision": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Gemini call time, s, by model",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:ml_obs.span.duration{$env,ml_app:firstlight-investigator,span_kind:llm} by {model_name}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
         "type": "note",
         "content": "Every investigation is a trace in **LLM Observability** (ml app `firstlight-investigator`): the agent span, each read-only tool it called, the Gemini calls with their tokens, and five evaluations — agrees with the rules, explains an unknown, grounded, farmer message OK, and right by the injected fault.",
         "background_color": "white",

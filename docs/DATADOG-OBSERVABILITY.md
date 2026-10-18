@@ -32,6 +32,7 @@ Business tags are set on the active span (`span.set_tag`) and bound to the logge
 | RUM | Browser SDK in the console, with `allowedTracingUrls` so clicks link to backend traces. |
 | LLM Observability | `ddtrace.llmobs`: `workflow`, `agent`, `tool`, `retrieval` and `llm` spans around the Gemini investigator, plus evaluations. |
 | Deployments | `DD_VERSION` is the git sha, so Deployment Tracking draws a marker on every chart when the version changes. |
+| Database Monitoring | The Agent's `mongo` check with `dbm: true`, declared as an Autodiscovery label on the Agent container, so turning it on never restarts the database. It collects:<br>• query samples with their explain plans;<br>• slow operations, from MongoDB's slow-query log;<br>• collection schemas;<br>• query metrics from `$queryStats`. The check signs in as a read-only `datadog` user whose password stays in the server's `.env`. Every MongoDB command carries its trace in a comment (`DD_DBM_PROPAGATION_MODE=full`), so a query in DBM opens its trace in APM, and the collection scan of scenario 3 shows up there with its plan. |
 
 ## Custom metrics
 
@@ -94,7 +95,7 @@ Defined in `infra/datadog/dashboards/`, each with an `env` template variable.
 
 ## Applying it, and moving to another org
 
-`scripts/datadog-apply.sh` copies `infra/datadog/` to the demo host and runs `apply.py` there, in a throwaway container with the server's `.env`, so no key leaves the server. Everything is matched by name and tagged `firstlight:managed`: running it again updates in place. To move to another org:
+`scripts/datadog-apply.sh` copies `infra/datadog/` to the demo host and runs `apply.py` there, in a throwaway container with the server's `.env`, so no key leaves the server. Everything is matched by name and tagged `firstlight:managed`: running it again updates in place. Database Monitoring needs one more step, once per MongoDB rather than per org: `scripts/datadog-dbm.sh` creates the `datadog` user and its password on the server. To move to another org:
 1. put the new `DD_API_KEY`, `DD_APP_KEY` and `DD_SITE` in the server's `.env`;
 2. run `docker compose up -d`;
 3. run `scripts/datadog-apply.sh`.

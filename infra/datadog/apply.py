@@ -44,11 +44,32 @@ def fill(value: Any, env: str, slos: dict[str, str]) -> Any:
     return value
 
 
-def check(response: httpx.Response) -> dict[str, Any]:
+class Refused(Exception):
+    """Datadog said no to one object; the others still go ahead."""
+
+
+FAILED: list[str] = []
+
+
+def check(response: httpx.Response) -> Any:
     if response.is_error:
         request = response.request
-        sys.exit(f"{request.method} {request.url.path}: {response.status_code} {response.text[:400]}")
+        raise Refused(f"{request.method} {request.url.path}: {response.status_code} {response.text[:400]}")
     return response.json() if response.content else {}
+
+
+def send(client: httpx.Client, method: str, path: str, body: dict[str, Any]) -> Any:
+    return check(client.request(method, path, json=body))
+
+
+def attempt(what: str, action: Any, *args: Any) -> Any:
+    """Run one call; if Datadog refuses it, say so and carry on with the rest."""
+    try:
+        return action(*args)
+    except Refused as exc:
+        FAILED.append(what)
+        print(f"FAILED {what}: {exc}")
+        return None
 
 
 def webhook(client: httpx.Client) -> None:
@@ -79,12 +100,20 @@ def monitors(client: httpx.Client, env: str) -> dict[str, int]:
             body["message"] += f"\n\n@webhook-{WEBHOOK}"
         if spec["type"] == "composite":
             body["query"] = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), spec["query"])
+        if spec["type"] == "composite" and any(
+            m[1] not in ids for m in re.finditer(r"\{(\w+)\}", spec["query"])
+        ):
+            FAILED.append(spec["name"])
+            print(f"SKIPPED {spec['name']}: a monitor it combines was not created")
+            continue
         current = existing.get(spec["name"])
         if current:
-            ids[spec["key"]] = check(client.put(f"/api/v1/monitor/{current['id']}", json=body))["id"]
+            result = attempt(spec["name"], send, client, "PUT", f"/api/v1/monitor/{current['id']}", body)
         else:
-            ids[spec["key"]] = check(client.post("/api/v1/monitor", json=body))["id"]
-        print(f"monitor {ids[spec['key']]}: {spec['name']}{' -> webhook' if spec.get('notify') else ''}")
+            result = attempt(spec["name"], send, client, "POST", "/api/v1/monitor", body)
+        if result:
+            ids[spec["key"]] = result["id"]
+            print(f"monitor {result['id']}: {spec['name']}{' -> webhook' if spec.get('notify') else ''}")
     return ids
 
 
@@ -102,34 +131,49 @@ def slos(client: httpx.Client, env: str, monitor_ids: dict[str, int]) -> dict[st
             "thresholds": [{"timeframe": spec["timeframe"], "target": spec["target"]}],
             "tags": [TAG, f"env:{env}"],
         }
+        if any(k not in monitor_ids for k in spec["monitors"]):
+            FAILED.append(spec["name"])
+            print(f"SKIPPED {spec['name']}: its monitor was not created")
+            continue
         current = existing.get(spec["name"])
         if current:
-            ids[spec["key"]] = check(client.put(f"/api/v1/slo/{current['id']}", json=body))["data"][0]["id"]
+            result = attempt(spec["name"], send, client, "PUT", f"/api/v1/slo/{current['id']}", body)
         else:
-            ids[spec["key"]] = check(client.post("/api/v1/slo", json=body))["data"][0]["id"]
-        print(f"slo {ids[spec['key']]}: {spec['name']}")
+            result = attempt(spec["name"], send, client, "POST", "/api/v1/slo", body)
+        if result:
+            ids[spec["key"]] = result["data"][0]["id"]
+            print(f"slo {ids[spec['key']]}: {spec['name']}")
     return ids
 
 
 def dashboards(client: httpx.Client, env: str, slo_ids: dict[str, str]) -> None:
     existing = {d["title"]: d for d in check(client.get("/api/v1/dashboard"))["dashboards"]}
     for file in sorted((HERE / "dashboards").glob("*.json")):
-        body = fill(json.loads(file.read_text()), env, slo_ids)
+        body = json.loads(file.read_text())
+        missing = set(re.findall(r"__SLO:(\w+)__", file.read_text())) - set(slo_ids)
+        if missing:  # an SLO it shows was not created: leave its widget out rather than the whole dashboard
+            body["widgets"] = [
+                w for w in body["widgets"] if not any(f"__SLO:{k}__" in json.dumps(w) for k in missing)
+            ]
+        body = fill(body, env, slo_ids)
         current = existing.get(body["title"])
         if current:
-            result = check(client.put(f"/api/v1/dashboard/{current['id']}", json=body))
+            result = attempt(body["title"], send, client, "PUT", f"/api/v1/dashboard/{current['id']}", body)
         else:
-            result = check(client.post("/api/v1/dashboard", json=body))
-        print(f"dashboard: {body['title']} https://{os.environ['DD_SITE']}{result['url']}")
+            result = attempt(body["title"], send, client, "POST", "/api/v1/dashboard", body)
+        if result:
+            print(f"dashboard: {body['title']} https://{os.environ['DD_SITE']}{result['url']}")
 
 
 def main() -> None:
     env = os.environ.get("DD_ENV") or "demo"
     headers = {"DD-API-KEY": os.environ["DD_API_KEY"], "DD-APPLICATION-KEY": os.environ["DD_APP_KEY"]}
     with httpx.Client(base_url=f"https://api.{os.environ['DD_SITE']}", headers=headers, timeout=30) as client:
-        webhook(client)
+        attempt("webhook", webhook, client)
         monitor_ids = monitors(client, env)
         dashboards(client, env, slos(client, env, monitor_ids))
+    if FAILED:
+        sys.exit(f"{len(FAILED)} not applied: {', '.join(FAILED)}")
 
 
 if __name__ == "__main__":

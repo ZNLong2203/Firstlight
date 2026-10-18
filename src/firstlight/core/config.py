@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     mongodb_db: str = "firstlight"
     mongodb_timeout_ms: int = 5000
     mongodb_socket_timeout_ms: int = 20000
+    # Share of queries MongoDB samples into $queryStats, which Datadog Database Monitoring reads for its
+    # query metrics. 0 leaves the server's setting alone. The setting does not survive a mongod restart,
+    # so the API applies it on every start.
+    mongodb_query_stats_rate: float = 0.0
 
     dd_env: str = "local"
     dd_version: str = "dev"
