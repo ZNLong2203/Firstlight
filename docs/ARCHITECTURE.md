@@ -232,7 +232,7 @@ A key has at most one open incident; later alerts for the same key join it. Each
 | Demo | One VM in Singapore (2 vCPU, 8 GB, about 9 USD a month) runs the same compose file with `COMPOSE_PROFILES=localdb,app,proxy,datadog`. Caddy serves HTTPS, and MongoDB runs next to the app. | The public demo and the webhook endpoints. The simulator runs 24/7, with the farm clock on Vietnam time. |
 | CI | GitHub Actions: ruff, mypy, and pytest against an `atlas-local` service container; the console's typecheck and build; images pushed to GHCR, tagged with the git sha | Quality gate and the images to deploy |
 
-`scripts/deploy.sh --build` builds the images on the VM. `scripts/release.sh` starts a given version of the API for the bad-deploy scenario and rolls it back.
+`scripts/deploy.sh --ci` runs the images CI built for a commit and pushed to GHCR, with the git sha as `DD_VERSION`, so Datadog's Deployment Tracking marks every deploy; `--build` builds on the VM instead. `scripts/release.sh` starts a given version of the API for the bad-deploy scenario and rolls it back.
 
 ## 8. Technology choices
 
