@@ -49,6 +49,7 @@ export function Track({ incident, offsetHours, compact = false }: { incident: In
   const stages = stagesOf(incident);
   const start = Date.parse(incident.opened_at);
   const current = stages.findIndex((s) => !s.at);
+  if (compact) return <CompactTrack stages={stages} start={start} current={current} />;
   return (
     <ol className={`grid ${compact ? "mt-3" : "mt-4"}`} style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
       {stages.map((stage, i) => {
@@ -83,5 +84,48 @@ export function Track({ incident, offsetHours, compact = false }: { incident: In
         );
       })}
     </ol>
+  );
+}
+
+/** For a card: the stops as dots, and in words only where the incident is and what comes next. */
+function CompactTrack({ stages, start, current }: { stages: Stage[]; start: number; current: number }) {
+  const reached = current < 0 ? stages.length - 1 : current - 1;
+  const last = stages[reached];
+  const next = current < 0 ? null : stages[current];
+  const lastTone = last?.tone ? TONE[last.tone].text : "text-paper";
+  return (
+    <div className="mt-3">
+      <ol className="flex items-center" aria-hidden="true">
+        {stages.map((stage, i) => {
+          const tone = stage.tone ? TONE[stage.tone] : null;
+          return (
+            <li key={stage.label} className={`flex items-center ${i < stages.length - 1 ? "flex-1" : ""}`}>
+              <span
+                className={`block size-[8px] shrink-0 rounded-full border ${
+                  stage.at ? (tone ? tone.node : "border-paper bg-paper") : i === current ? "border-paper bg-ink-950" : "border-ink-600 bg-ink-950"
+                }`}
+              />
+              {i < stages.length - 1 && (
+                <span className={`mx-1 h-0 flex-1 border-t ${stages[i + 1].at ? "border-paper/45" : "border-dashed border-ink-600"}`} />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-1.5 text-[11.5px] text-mute">
+        {last && (
+          <>
+            <span className={lastTone}>{last.label}</span>
+            {last.at && reached > 0 && <span className="font-mono"> +{seconds(Math.max(0, Math.round((Date.parse(last.at) - start) / 1000)))}</span>}
+          </>
+        )}
+        {next && (
+          <>
+            {" "}
+            · next: <span className="text-paper-2">{next.label.toLowerCase()}</span>
+          </>
+        )}
+      </p>
+    </div>
   );
 }

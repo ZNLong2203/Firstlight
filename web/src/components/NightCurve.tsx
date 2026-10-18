@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { CAUSE_LABEL, farmClock, hhmm } from "../format";
 import type { Incident, Night } from "../types";
 
-const HEIGHT = 176;
 const PAD = { left: 28, right: 72, top: 30, bottom: 30 };
 const HOUR = 3_600_000;
 
@@ -25,8 +24,7 @@ interface Props {
   now: number;
   offsetHours: number;
   total: number;
-  /** A drawer covers the right of the screen. */
-  inset: boolean;
+  height?: number;
   onSelect: (id: string) => void;
 }
 
@@ -35,17 +33,17 @@ interface Props {
  * lowest pond, every ten minutes. Oxygen bottoms out just before dawn, so those hours are marked; the
  * night's incidents sit on the time axis where they began.
  */
-export function NightCurve({ night, incidents, now, offsetHours, total, inset, onSelect }: Props) {
+export function NightCurve({ night, incidents, now, offsetHours, total, height = 300, onSelect }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const start = night ? Date.parse(night.start) : 0;
   const end = night ? Date.parse(night.end) : 0;
   const tonight = night !== null && now >= start && now < end;
 
   return (
-    <section className="border-b border-ink-700 bg-ink-950" aria-label="Oxygen across the estate tonight">
-      <div className={`mx-auto max-w-[1600px] px-4 pt-4 sm:px-8 ${inset ? "xl:pr-[564px]" : ""}`}>
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-          <h2 className="font-display text-[17px] text-paper">
+    <section aria-label="Oxygen across the estate tonight">
+      <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-ink-700 pb-3">
+          <h2 className="font-display text-[24px] leading-none text-paper">
             {night === null ? "The night" : tonight ? "Tonight" : "Last night"}, across {total} ponds
           </h2>
           <p className="flex flex-wrap items-center gap-x-4 text-[12px] text-mute">
@@ -68,9 +66,10 @@ export function NightCurve({ night, incidents, now, offsetHours, total, inset, o
             <span>every 10 minutes, mg/L</span>
           </p>
         </div>
-        <div ref={ref} className="relative" style={{ height: HEIGHT }}>
+        <div ref={ref} className="relative mt-4" style={{ height }}>
           {night && width > 0 && (
             <Chart
+              height={height}
               night={night}
               incidents={incidents}
               now={now}
@@ -89,6 +88,7 @@ export function NightCurve({ night, incidents, now, offsetHours, total, inset, o
 }
 
 function Chart({
+  height: HEIGHT,
   night,
   incidents,
   now,
@@ -99,6 +99,7 @@ function Chart({
   end,
   onSelect,
 }: {
+  height: number;
   night: Night;
   incidents: Incident[];
   now: number;
