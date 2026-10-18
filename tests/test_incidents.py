@@ -8,7 +8,7 @@ import httpx
 from tests.conftest import DEMO_CODE
 
 from firstlight.brain.evidence import Evidence, diagnose
-from firstlight.brain.incidents import Policy, find_problems, incident_cycle
+from firstlight.brain.incidents import Policy, find_problems, incident_cycle, recovered
 from firstlight.brain.main import forecast_once
 from firstlight.brain.playbooks import ensure_playbooks
 from firstlight.core.config import get_settings
@@ -190,6 +190,29 @@ async def test_power_cut_waits_for_approval_then_runs_the_generator(
     detail = (await harness.client.get(f"/v1/incidents/{resolved['_id']}")).json()
     assert [c["action"] for c in detail["commands"]] == ["generator.start"]
     assert [e["kind"] for e in detail["timeline"]].count("approved") == 1
+
+
+async def test_recovery_allows_an_afternoon_decline_but_not_a_relapse(
+    api: tuple[httpx.AsyncClient, Any],
+) -> None:
+    """In the afternoon oxygen eases down from 7 mg/L as the algae slow: that pond has recovered. A pond
+    falling just as fast from 4.3 mg/L has not."""
+    _, db = api
+    now = datetime.now(UTC).replace(microsecond=0)
+    for pond, start in (("afternoon", 7.5), ("relapse", 4.3)):
+        await db.readings.insert_many(
+            [
+                {
+                    "ts": now - timedelta(seconds=10 * i),
+                    "meta": {"farm": "F", "pond": pond, "gateway": "g"},
+                    "do": start - 0.004 * (24 - i),
+                }
+                for i in range(24)
+            ]
+        )
+    after = now - timedelta(minutes=3)
+    assert await recovered(db, ["afternoon"], now, 2, after)
+    assert not await recovered(db, ["relapse"], now, 2, after)
 
 
 def test_problems_are_grouped_by_their_likely_cause() -> None:

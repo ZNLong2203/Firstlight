@@ -50,6 +50,7 @@ DELIVER_FOR = timedelta(minutes=2)
 KEEP_COMMANDS = timedelta(days=7)
 MAX_RETRIES = 3
 SLOT_S = 20  # a gap is a 20-second slot with no reading at all
+HOLD_MIN = 30  # a recovered pond's trend must keep it at 4 mg/L or more for this long
 
 
 @dataclass(frozen=True)
@@ -372,7 +373,9 @@ async def recovered(db: Db, ponds: list[str], now: datetime, minutes: float, aft
         mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
         var = sum((x - mx) ** 2 for x in xs)
         slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / var if var else 0.0
-        if slope < -0.003:
+        # Falling slowly from far above the line is the afternoon, not a relapse: what counts is whether
+        # the trend would take the pond under 4 mg/L within half an hour.
+        if slope < -0.003 and ys[-1] + slope * HOLD_MIN < SAFE_MGL:
             return False
     return True
 
