@@ -16,6 +16,7 @@ from firstlight.edge.gateway import Gateway
 from firstlight.edge.world import World
 
 log = logging.getLogger("firstlight.edge")
+SPREAD = 0.8  # share of each interval over which the gateways' batches are spread
 
 
 def farm_hour(now: datetime, offset_hours: float) -> float:
@@ -98,19 +99,25 @@ async def run() -> None:
         log.info("manifests announced", extra={"ctx": {"gateways": len(gateways)}})
         background += [asyncio.create_task(gateway.listen(channels)) for gateway in gateways]
 
+        # Real gateways do not report in step: each takes its own moment within the interval, so the
+        # API sees a steady trickle of batches rather than every farm at once.
+        slot = settings.sim_batch_seconds * SPREAD / max(1, len(gateways))
+
+        async def report(gateway: Gateway, delay: float) -> None:
+            await asyncio.sleep(delay)
+            gateway.collect(datetime.now(UTC), rng)
+            await gateway.flush(client)
+
         last = time.monotonic()
         try:
             while True:
                 started = time.monotonic()
-                now = datetime.now(UTC)
-                hour = farm_hour(now, offset)
+                hour = farm_hour(datetime.now(UTC), offset)
                 dt = min(started - last, 60.0)
                 last = started
                 for farm in farms:
                     farm.step(hour, dt, rng)
-                for gateway in gateways:
-                    gateway.collect(now, rng)
-                await asyncio.gather(*(gateway.flush(client) for gateway in gateways))
+                await asyncio.gather(*(report(gateway, i * slot) for i, gateway in enumerate(gateways)))
                 await asyncio.sleep(max(0.0, settings.sim_batch_seconds - (time.monotonic() - started)))
         finally:
             for task in background:
