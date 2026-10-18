@@ -103,16 +103,17 @@ def find_problems(states: list[Doc], covered: set[str], now: datetime) -> list[P
     problems: list[Problem] = []
     grouped: set[str] = set()
     quiet = [g for g, ps in by_gateway.items() if all(_stale(p, now) for p in ps)]
+    fading = [g for g, ps in by_gateway.items() if all(_stale(p, now, FRESH_S) for p in ps)]
     fleet = len(by_gateway) >= 4
     if fleet and len(quiet) * 2 > len(by_gateway):
-        ponds = [p["_id"] for g in quiet for p in by_gateway[g]]
+        # The backend: every gateway that has missed its reports, with those about to cross the line.
+        ponds = [p["_id"] for g in fading for p in by_gateway[g]]
         problems.append(Problem("estate", "estate", None, None, ponds, ["fleet_silent"]))
         grouped.update(ponds)
     else:
         # Gateways do not all stop in the same second. While most of the fleet has missed reports, a gateway
         # that has just gone quiet waits to see whether the rest follow: a backend that stops taking data is
         # one incident, not one for each gateway that happened to cross the line first.
-        fading = [g for g, ps in by_gateway.items() if all(_stale(p, now, FRESH_S) for p in ps)]
         holding = fleet and len(fading) * 2 > len(by_gateway)
         for gateway in quiet:
             ponds = [p["_id"] for p in by_gateway[gateway]]
@@ -215,6 +216,22 @@ async def open_incident(
         },
     )
     return doc
+
+
+async def _take_in(
+    db: Db, incident: Doc, ponds: list[str], states: dict[str, Doc], now: datetime
+) -> list[str]:
+    """An open incident takes in the ponds its problem has grown to: the gateways that go quiet after an
+    estate incident opened, so that their Datadog alerts and their return land on it too."""
+    new = [p for p in ponds if p not in set(incident["ponds"])]
+    if new:
+        incident["ponds"] = [*incident["ponds"], *new]
+        at_risk = _at_risk(incident["ponds"], states, now)
+        await db.incidents.update_one(
+            {"_id": incident["_id"]}, {"$addToSet": {"ponds": {"$each": new}}, "$set": {"at_risk": at_risk}}
+        )
+        await db.pond_state.update_many({"_id": {"$in": new}}, {"$set": {"open_incident": incident["_id"]}})
+    return new
 
 
 async def investigate(
@@ -846,7 +863,11 @@ async def incident_cycle(db: Db, metrics: Metrics, policy: Policy, now: datetime
     for problem in find_problems(states, set(), now):
         active.add(problem.key)
         active.update(problem.ponds)
-        if problem.key in open_keys or set(problem.ponds) <= covered:
+        if problem.key in open_keys:
+            current = next(i for i in open_incidents if i["key"] == problem.key)
+            covered.update(await _take_in(db, current, problem.ponds, by_id, now))
+            continue
+        if set(problem.ponds) <= covered:
             continue  # its ponds are already in an open incident, as gateways are while the fleet comes back
         if incident := await open_incident(db, problem, by_id, now):
             open_incidents.append(incident)

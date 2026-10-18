@@ -260,8 +260,8 @@ async def test_backend_regression_is_traced_to_the_release_that_caused_it(
     # What release 1.4 does to ingest, seen from outside: most gateways stop getting their batches in,
     # not all in the same second.
     gateways = list(harness.world.gateways.values())[:4]
-    for pair in (gateways[:2], gateways[2:]):
-        for gateway in pair:
+    for batch in (gateways[:2], gateways[2:3]):
+        for gateway in batch:
             gateway.online = False
         await harness.tick()
     # 1.4 records its start once it is up: after the last batch, which the old version took.
@@ -276,8 +276,14 @@ async def test_backend_regression_is_traced_to_the_release_that_caused_it(
     message = next(e["text"] for e in monitoring["timeline"] if e["kind"] == "notify")
     assert "1.4" in message and "rollback về 1.3" in message
 
-    for pair in (gateways[:2], gateways[2:]):  # rolled back: the batches get in again
-        for gateway in pair:
+    gateways[3].online = False  # one more gateway's batches stop getting in while the incident is open
+    await harness.tick(8)
+    late = {p.id for p in gateways[3].farm.ponds}
+    grown = await db.incidents.find_one({"_id": monitoring["_id"]})
+    assert late <= set(grown["ponds"]), "the estate incident takes in a gateway that goes quiet later"
+
+    for batch in (gateways[:3], gateways[3:]):  # rolled back: the batches get in again, that one last
+        for gateway in batch:
             gateway.online = True
         await harness.tick()
     resolved = await harness.until("estate", "resolved", limit=6)
@@ -296,13 +302,14 @@ def test_a_fleet_going_quiet_waits_to_be_one_problem() -> None:
         pond = {"farm": farm, "gateway": f"GW-{farm}", "last": last}
         return [{"_id": f"{farm}-0{i}", **pond} for i in range(3)]
 
-    def keys(*silences: float) -> list[str]:
+    def problems(*silences: float) -> list[tuple[str, int]]:
         states = [s for farm, silent in zip("ABCDE", silences, strict=True) for s in gateway(farm, silent)]
-        return [p.key for p in find_problems(states, set(), now)]
+        return [(p.key, len(p.ponds)) for p in find_problems(states, set(), now)]
 
-    assert keys(65, 62, 55, 50, 45) == [], "two crossed the line first; the rest of the fleet follows"
-    assert keys(65, 5, 5, 5, 5) == ["GW-A"], "quiet while the others report: that gateway's own problem"
-    assert keys(85, 50, 45, 40, 35) == ["GW-A"], "the fleet slowed but never stopped: it waits no longer"
+    assert problems(65, 62, 55, 50, 45) == [], "two crossed the line first; the rest of the fleet follows"
+    assert problems(65, 65, 65, 45, 5) == [("estate", 12)], "with the one about to cross, not the last one"
+    assert problems(65, 5, 5, 5, 5) == [("GW-A", 3)], "quiet while the others report: that gateway's problem"
+    assert problems(85, 50, 45, 40, 35) == [("GW-A", 3)], "the fleet slowed but never stopped: no waiting"
 
 
 def test_a_release_that_stopped_ingest_starts_just_after_the_last_reading() -> None:
