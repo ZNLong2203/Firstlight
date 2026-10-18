@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { effectiveStatus } from "../format";
 import { oxygenColor, STATUS_LABEL, STATUS_RING, STATUS_TEXT, textOn } from "../status";
@@ -37,7 +37,7 @@ export function EstateMap({ ponds, now, selected, onSelect }: Props) {
         {Object.entries(PROVINCES)
           .filter(([code]) => provinces.has(code))
           .map(([code, name]) => {
-            const farms = [...provinces.get(code)!.entries()].sort(([a], [b]) => a.localeCompare(b));
+            const farms = [...provinces.get(code)!.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
             const all = farms.flatMap(([, list]) => list);
             const statuses = all.map((p) => effectiveStatus(p, now));
             const lowest = Math.min(...all.filter((p) => p.last).map((p) => p.last!.do));
@@ -55,32 +55,130 @@ export function EstateMap({ ponds, now, selected, onSelect }: Props) {
                   </p>
                   <Tally statuses={statuses} />
                 </header>
-                <div className="flex flex-wrap gap-x-3.5 gap-y-3">
-                  {farms.map(([farm, list]) => (
-                    <div key={farm}>
-                      <div className="mb-1 font-mono text-[10px] tracking-wide text-faint">{farm}</div>
-                      {/* The dikes between ponds: an earthen frame around the farm. */}
-                      <div className="grid grid-cols-2 gap-[3px] rounded-[6px] bg-[#2a2a21] p-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                        {list
-                          .sort((a, b) => a._id.localeCompare(b._id))
-                          .map((pond) => (
-                            <Pond
-                              key={pond._id}
-                              pond={pond}
-                              status={effectiveStatus(pond, now)}
-                              selected={pond._id === selected}
-                              onSelect={onSelect}
-                            />
-                          ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <Farms farms={farms} now={now} selected={selected} onSelect={onSelect} />
               </div>
             );
           })}
       </div>
     </section>
+  );
+}
+
+const TILE = { w: 54, h: 42, gap: 3 };
+const FARM_GAP = 14;
+
+/** Two rows of ponds, as many columns as the farm needs. */
+function columns(ponds: number): number {
+  return Math.max(1, Math.ceil(ponds / 2));
+}
+
+function farmWidth(ponds: number): number {
+  const cols = columns(ponds);
+  return cols * TILE.w + (cols - 1) * TILE.gap + 2 * TILE.gap;
+}
+
+/**
+ * Split items of these widths into the fewest rows that fit, then even the rows out, so that a province
+ * whose farms just miss one line gets two balanced lines instead of a farm alone on the second.
+ */
+export function balancedRows(widths: number[], max: number, gap: number): number[][] {
+  const fill = (limit: number) => {
+    const rows: number[][] = [[]];
+    let used = 0;
+    widths.forEach((width, i) => {
+      const row = rows[rows.length - 1];
+      const need = row.length ? used + gap + width : width;
+      if (row.length && need > limit) {
+        rows.push([i]);
+        used = width;
+      } else {
+        row.push(i);
+        used = need;
+      }
+    });
+    return rows;
+  };
+  const fewest = fill(max).length;
+  if (fewest === 1) return fill(max);
+  let lo = Math.max(...widths);
+  let hi = max;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (fill(mid).length <= fewest) hi = mid;
+    else lo = mid + 1;
+  }
+  return fill(lo);
+}
+
+function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry.contentRect.width)));
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
+function Farms({
+  farms,
+  now,
+  selected,
+  onSelect,
+}: {
+  farms: [string, PondState[]][];
+  now: number;
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const rows = width
+    ? balancedRows(
+        farms.map(([, list]) => farmWidth(list.length)),
+        width,
+        FARM_GAP,
+      )
+    : [farms.map((_, i) => i)];
+  return (
+    <div ref={ref} className="min-w-0 flex-1 space-y-3">
+      {rows.map((row) => (
+        <div key={row[0]} className="flex" style={{ gap: FARM_GAP }}>
+          {row.map((i) => {
+            const [farm, list] = farms[i];
+            return (
+              <div key={farm}>
+                <div className="mb-1 font-mono text-[10px] tracking-wide text-faint">
+                  {farm} <span className="text-ink-600">· {list.length}</span>
+                </div>
+                {/* The dikes between ponds: an earthen frame around the farm. */}
+                <div
+                  className="grid rounded-[6px] bg-[#2a2a21] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                  style={{
+                    gridTemplateColumns: `repeat(${columns(list.length)}, ${TILE.w}px)`,
+                    gap: TILE.gap,
+                    padding: TILE.gap,
+                  }}
+                >
+                  {[...list]
+                    .sort((a, b) => a._id.localeCompare(b._id, undefined, { numeric: true }))
+                    .map((pond) => (
+                      <Pond
+                        key={pond._id}
+                        pond={pond}
+                        status={effectiveStatus(pond, now)}
+                        selected={pond._id === selected}
+                        onSelect={onSelect}
+                      />
+                    ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
   );
 }
 
