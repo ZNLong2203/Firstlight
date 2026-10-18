@@ -1,0 +1,120 @@
+[
+  {
+    "key": "hypoxia_forecast",
+    "name": "Firstlight · A pond is heading for hypoxia",
+    "type": "query alert",
+    "query": "min(last_2m):min:firstlight.pond.minutes_to_hypoxia{env:__ENV__} by {farm,pond,gateway} < 30",
+    "message": "{{#is_alert}}Pond {{pond.name}} on farm {{farm.name}} is forecast to reach 3 mg/L in {{value}} minutes.{{/is_alert}}{{#is_warning}}Pond {{pond.name}} could reach 3 mg/L within the hour ({{value}} minutes).{{/is_warning}}{{#is_recovery}}Pond {{pond.name}} is out of danger.{{/is_recovery}}",
+    "notify": true,
+    "options": {
+      "thresholds": { "critical": 30, "warning": 45 },
+      "require_full_window": false,
+      "evaluation_delay": 0,
+      "new_group_delay": 120,
+      "notify_no_data": false,
+      "renotify_interval": 10,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "gateway_blind",
+    "name": "Firstlight · A gateway's ponds have gone quiet",
+    "type": "query alert",
+    "query": "max(last_2m):max:firstlight.pond.freshness_seconds{env:__ENV__} by {farm,gateway} > 60",
+    "message": "{{#is_alert}}No reading from gateway {{gateway.name}} (farm {{farm.name}}) for {{value}} s: its ponds are blind.{{/is_alert}}{{#is_recovery}}Gateway {{gateway.name}} is reporting again.{{/is_recovery}}",
+    "notify": true,
+    "options": {
+      "thresholds": { "critical": 60 },
+      "require_full_window": false,
+      "evaluation_delay": 0,
+      "new_group_delay": 120,
+      "notify_no_data": false,
+      "renotify_interval": 10,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "aerator_off",
+    "name": "Firstlight · An aerator is switched on but not turning",
+    "type": "query alert",
+    "query": "max(last_1m):max:firstlight.pond.aerators_off{env:__ENV__} by {farm,pond,gateway} > 0",
+    "message": "{{#is_alert}}{{value}} aerator(s) in pond {{pond.name}} draw no current. Context for the hypoxia forecast; a repair ticket keeps it open until the technician fixes it.{{/is_alert}}",
+    "notify": false,
+    "options": {
+      "thresholds": { "critical": 0 },
+      "require_full_window": false,
+      "evaluation_delay": 0,
+      "new_group_delay": 120,
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "aerator_failure",
+    "name": "Firstlight · Aerator failure putting a pond at risk",
+    "type": "composite",
+    "query": "{hypoxia_forecast} && {aerator_off}",
+    "message": "{{#is_alert}}An aerator stopped and the pond's oxygen is heading for 3 mg/L: an aerator failure, with high confidence.{{/is_alert}}",
+    "notify": true,
+    "options": { "renotify_interval": 10, "include_tags": true }
+  },
+  {
+    "key": "slow_ingest",
+    "name": "Firstlight · Ingest is slow",
+    "type": "query alert",
+    "query": "percentile(last_5m):p95:trace.fastapi.request{env:__ENV__,service:firstlight-api,resource_name:post_/v1/ingest} > 0.5",
+    "message": "{{#is_alert}}Ingest p95 is {{value}} s. Slow ingest makes gateways buffer and ponds go blind; compare the version tag with the last deployment.{{/is_alert}}",
+    "notify": false,
+    "options": {
+      "thresholds": { "critical": 0.5, "warning": 0.25 },
+      "require_full_window": false,
+      "evaluation_delay": 0,
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "oxygen_anomaly",
+    "name": "Firstlight · The estate's oxygen is unusually low for this time of night",
+    "type": "query alert",
+    "query": "avg(last_30m):anomalies(avg:firstlight.pond.do{env:__ENV__}, 'agile', 3, direction='below', interval=60, alert_window='last_15m', count_default_zero='true', seasonality='daily') >= 1",
+    "message": "{{#is_alert}}The estate's average dissolved oxygen is below what this hour usually brings. The trend in MongoDB watches each pond; this watches the night as a whole.{{/is_alert}}",
+    "notify": false,
+    "options": {
+      "thresholds": { "critical": 1, "critical_recovery": 0 },
+      "threshold_windows": { "trigger_window": "last_15m", "recovery_window": "last_15m" },
+      "require_full_window": false,
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "brain_overrun",
+    "name": "Firstlight · The brain's cycle runs past 10 s",
+    "type": "query alert",
+    "query": "max(last_5m):max:firstlight.brain.cycle_s{env:__ENV__} > 10",
+    "message": "{{#is_alert}}A brain cycle took {{value}} s: forecasts are older than the 10 s the brain promises.{{/is_alert}}",
+    "notify": false,
+    "options": {
+      "thresholds": { "critical": 10, "warning": 8 },
+      "require_full_window": false,
+      "evaluation_delay": 0,
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "key": "ai_wrong",
+    "name": "Firstlight · The AI investigator got a cause wrong",
+    "type": "query alert",
+    "query": "sum(last_1h):sum:firstlight.ai.rca{env:__ENV__,result:incorrect}.as_count() > 0",
+    "message": "{{#is_alert}}Gemini's cause did not match the fault the chaos panel injected. The rules decided the incident; check the investigation in LLM Observability.{{/is_alert}}",
+    "notify": false,
+    "options": {
+      "thresholds": { "critical": 0 },
+      "require_full_window": false,
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  }
+]

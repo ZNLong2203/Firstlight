@@ -1,0 +1,118 @@
+{
+  "title": "Firstlight · Data plane",
+  "description": "The software that watches the ponds: ingest by version, freshness, the brain's cycle, commands, MongoDB and the logs. Managed by infra/datadog/apply.py.",
+  "layout_type": "ordered",
+  "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
+  "widgets": [
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Ingest requests per second, by version",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.fastapi.request.hits{$env,service:firstlight-api,resource_name:post_/v1/ingest} by {version}.as_rate()",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Ingest latency p95, s, by version",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.fastapi.request{$env,service:firstlight-api,resource_name:post_/v1/ingest} by {version}",
+            "display_type": "line"
+          }
+        ],
+        "markers": [{ "value": "y = 0.5", "display_type": "error dashed", "label": "slow ingest" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Readings stored per second",
+        "requests": [{ "q": "sum:firstlight.ingest.readings{$env}.as_rate()", "display_type": "bars" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "How old a batch is when it lands, s",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:firstlight.ingest.lag_seconds{$env}",
+            "display_type": "line",
+            "metadata": [{ "expression": "avg:firstlight.ingest.lag_seconds{$env}", "alias_name": "average" }]
+          },
+          {
+            "q": "max:firstlight.ingest.lag_seconds{$env}",
+            "display_type": "line",
+            "style": { "line_type": "dashed" },
+            "metadata": [{ "expression": "max:firstlight.ingest.lag_seconds{$env}", "alias_name": "worst" }]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Stalest gateways, seconds since a reading",
+        "requests": [{ "q": "top(max:firstlight.pond.freshness_seconds{$env} by {gateway}, 10, 'last', 'desc')" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "The brain's cycle, s",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:firstlight.brain.cycle_s{$env}",
+            "display_type": "line",
+            "metadata": [{ "expression": "avg:firstlight.brain.cycle_s{$env}", "alias_name": "average" }]
+          },
+          {
+            "q": "max:firstlight.brain.cycle_s{$env}",
+            "display_type": "line",
+            "style": { "line_type": "dashed" },
+            "metadata": [{ "expression": "max:firstlight.brain.cycle_s{$env}", "alias_name": "longest" }]
+          }
+        ],
+        "markers": [{ "value": "y = 10", "display_type": "error dashed", "label": "promised" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Command acknowledged by the gateway, ms",
+        "show_legend": true,
+        "requests": [{ "q": "avg:firstlight.command.ack_latency_ms{$env} by {action}", "display_type": "line" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "MongoDB calls per second, by service",
+        "show_legend": true,
+        "requests": [{ "q": "sum:trace.pymongo.cmd.hits{$env} by {service}.as_rate()", "display_type": "line" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "log_stream",
+        "title": "Warnings and errors",
+        "query": "service:firstlight-* status:(warn OR error)",
+        "columns": ["host", "service"],
+        "show_date_column": true,
+        "show_message_column": true,
+        "message_display": "expanded-md",
+        "sort": { "column": "time", "order": "desc" }
+      }
+    }
+  ]
+}

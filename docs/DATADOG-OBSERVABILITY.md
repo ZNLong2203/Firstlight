@@ -1,6 +1,6 @@
 # Datadog observability
 
-> **Status:** the code side is built. Every service runs under ddtrace, emits DogStatsD metrics and JSON logs with trace ids, and the investigator records LLM Observability spans and evaluations. The webhook endpoint is live and checks its secret. Dashboards, monitors and SLOs are applied once the Datadog account is active; they will be kept as JSON in `infra/datadog/` and applied by script, so they can be rebuilt in any Datadog org. Sections that describe them are the design.
+> **Status:** live on a Datadog test org (site ap1) since 18/10/2026. The Agent collects APM traces from the three services, DogStatsD metrics, JSON logs carrying trace ids, and the investigator's LLM Observability spans and evaluations. Monitors, SLOs, dashboards and the webhook are code in `infra/datadog/`, applied with `scripts/datadog-apply.sh`; the notebook in *Proof of recovery* is still the design.
 
 ![Observability with Datadog](images/datadog-observability.png)
 
@@ -57,54 +57,66 @@ To add with the Datadog setup: per-pond minute counts for the SLOs (`firstlight.
 
 ## Monitors
 
-All monitors notify `@webhook-firstlight`, and use `{{pond.name}}` and `{{gateway.name}}` in their messages.
+Defined in `infra/datadog/monitors.json`. Three of them call the webhook. Each of those alerts carries a pond, gateway or farm: the brain links it to the open incident for that target, with how many seconds after Firstlight's own detection it came, or opens one. The other monitors alert only in Datadog. An aerator under repair, for instance, stays "off" for hours and must not open incident after incident.
 
-| # | Monitor | Query (abridged) | Why it matters |
-|---|---|---|---|
-| M1 | Hypoxia forecast | `min(last_2m):min:firstlight.pond.minutes_to_hypoxia{env:demo} by {farm,pond} < 30` (warn < 45) | Fires on the forecast, before the pond is in danger. |
-| M2 | DO anomaly | `avg(last_15m):anomalies(avg:firstlight.pond.do{env:demo} by {pond}, 'agile', 3, direction='below') >= 1` | Catches unusual nights that the trend misses. |
-| M3 | Pond blind | `max(last_2m):max:firstlight.pond.freshness_seconds{env:demo} by {gateway} > 60` | Silence is a risk too. |
-| M4 | Slow ingest | `percentile(last_5m):p95:trace.fastapi.request{service:firstlight-api,resource_name:post_/v1/ingest} > 0.5` | A slow backend makes ponds go blind. |
-| M5 | Gateway reconnects | `logs("service:firstlight-edge status:error @evt:reconnect_failed").by("gateway").last("5m") > 3` | Separates a 4G problem from a backend problem. |
-| M6 | Aerator off | `max(last_1m):max:firstlight.pond.aerators_off{env:demo} by {farm,pond} > 0` | Context for M1. |
-| C1 | Composite | `M1 && M6` | Aerator failure with high confidence. |
+| Monitor | Query | Webhook |
+|---|---|---|
+| A pond is heading for hypoxia | `min(last_2m):min:firstlight.pond.minutes_to_hypoxia{env:demo} by {farm,pond,gateway} < 30`, warning under 45 | yes |
+| A gateway's ponds have gone quiet | `max(last_2m):max:firstlight.pond.freshness_seconds{env:demo} by {farm,gateway} > 60` | yes |
+| Aerator failure putting a pond at risk | composite: the hypoxia forecast and an aerator that is on but not turning | yes |
+| An aerator is switched on but not turning | `max(last_1m):max:firstlight.pond.aerators_off{env:demo} by {farm,pond,gateway} > 0` | no |
+| Ingest is slow | `percentile(last_5m):p95:trace.fastapi.request{service:firstlight-api,resource_name:post_/v1/ingest} > 0.5` | no |
+| The estate's oxygen is unusually low for this time of night | `anomalies(avg:firstlight.pond.do{env:demo}, 'agile', 3, direction='below', seasonality='daily')` | no |
+| The brain's cycle runs past 10 s | `max(last_5m):max:firstlight.brain.cycle_s{env:demo} > 10` | no |
+| The AI investigator got a cause wrong | `sum(last_1h):sum:firstlight.ai.rca{result:incorrect}.as_count() > 0` | no |
 
-The settings that keep monitors quiet are `require_full_window: false` for short windows, `evaluation_delay: 0`, `notify_no_data` only on M3, and `renotify_interval` 10 minutes. The anomaly monitor needs history: the simulator runs continuously so M2 has several days of data before the demo.
+Every monitor sets `require_full_window: false` and `notify_no_data: false`. A new pond is not judged for its first two minutes (`new_group_delay`), and a monitor that calls the webhook renotifies every 10 minutes. The anomaly monitor needs history, and the simulator runs around the clock to give it some.
 
 ## SLOs
 
-| SLO | Good events / total events | Target | Window |
-|---|---|---|---|
-| Oxygen safety, per pond | `firstlight.pond.safe_minutes` / `firstlight.pond.total_minutes` | 99.5 % | 7 days |
-| Pond visibility | `firstlight.pond.fresh_minutes` / `firstlight.pond.total_minutes` | 99 % | 7 days |
-| Ingest latency | ingest requests under 500 ms / all ingest requests | 99 % | 7 days |
+Defined in `infra/datadog/slos.json` and based on the monitors above, so they need no extra metric.
 
-Burn-rate alerts on the first two SLOs use the same webhook.
+| SLO | From the monitor | Target | Window |
+|---|---|---|---|
+| Oxygen safety | A pond is heading for hypoxia | 99.5% | 7 days |
+| Every pond seen | A gateway's ponds have gone quiet | 99% | 7 days |
+| Ingest under 500 ms | Ingest is slow | 99% | 7 days |
 
 ## Dashboards
 
+Defined in `infra/datadog/dashboards/`, each with an `env` template variable.
+
 | Dashboard | Widgets |
 |---|---|
-| **Night Watch** (business) | Host map of ponds by `minutes_to_hypoxia`; DO with forecast per farm; open incidents; lead time, MTTR, false alarms prevented; SLO widgets |
-| **Data Plane** (system) | Ingest rate and p95 by `version` with deploy markers; freshness by gateway; gateway buffer depth; command ack latency; MongoDB span latency by collection; error logs |
-| **AI Investigator** | LLM Observability: latency, tokens, cost per investigation; RCA accuracy from evaluations |
+| **Night watch** (business) | lowest oxygen and soonest hypoxia now; incidents and false alarms stopped; oxygen across the estate against the 3 and 4 mg/L lines; the ponds closest to 3 mg/L; incidents by cause; time to detect and to recover; the two pond SLOs; the monitors |
+| **Data plane** (system) | ingest rate and p95 by `version`; readings stored; how old a batch is when it lands; the stalest gateways; the brain's cycle; command acknowledgement; MongoDB calls by service; warnings and errors |
+| **AI investigator** | investigations finished; share right by the injected fault; investigation time; results over time; where the traces and evaluations are in LLM Observability |
+
+## Applying it, and moving to another org
+
+`scripts/datadog-apply.sh` copies `infra/datadog/` to the demo host and runs `apply.py` there, in a throwaway container with the server's `.env`, so no key leaves the server. Everything is matched by name and tagged `firstlight:managed`: running it again updates in place. To move to another org:
+1. put the new `DD_API_KEY`, `DD_APP_KEY` and `DD_SITE` in the server's `.env`;
+2. run `docker compose up -d`;
+3. run `scripts/datadog-apply.sh`.
 
 ## The webhook
 
+`@webhook-firstlight` posts to `https://<PUBLIC_HOST>/v1/hooks/datadog` with this payload:
+
 ```json
 {
-  "alert_id": "$ALERT_ID",
+  "alert_id": "$ALERT_CYCLE_KEY",
   "transition": "$ALERT_TRANSITION",
+  "monitor_id": "$ALERT_ID",
   "title": "$EVENT_TITLE",
-  "monitor": "$ALERT_METRIC",
-  "pond": "$TAGS[pond]",
-  "gateway": "$TAGS[gateway]",
+  "scope": "$ALERT_SCOPE",
+  "tags": "$TAGS",
   "link": "$LINK",
   "date": "$DATE"
 }
 ```
 
-The webhook sends a shared-secret header. The API checks it, inserts into `alerts` (unique on `alert_id + transition`), queues the job and returns 200 within milliseconds. Datadog times out at 15 s and retries on 5xx, so the handler never does the work inline.
+It carries the header `X-Firstlight-Signature`, which holds `WEBHOOK_SECRET`. The API checks the header, reads the pond, gateway or farm from the alert's scope and tags, and inserts the alert into `alerts` (unique on `alert_id + transition`). It returns 200 within milliseconds, so Datadog's 15 s timeout and retries on 5xx never matter: the brain does the work on its next cycle.
 
 ## AI and agent observability
 
@@ -159,4 +171,4 @@ The notebook link is stored on the incident.
 
 ## Before the trial ends
 
-Datadog data from the trial does not outlive it. Dashboards and monitors are exported as JSON into `infra/datadog/`, the demo video is recorded during the build, and the apply script can recreate everything in another org.
+Datadog data from a trial does not outlive it. The setup lives as code in `infra/datadog/` and can be recreated in another org with one command, and the demo video is recorded while the data is there.

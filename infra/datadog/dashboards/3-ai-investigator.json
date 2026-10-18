@@ -1,0 +1,76 @@
+{
+  "title": "Firstlight · AI investigator",
+  "description": "Gemini's second opinion on every incident: how often it runs, how long it takes, and how often it is right by the fault that was really injected. Managed by infra/datadog/apply.py.",
+  "layout_type": "ordered",
+  "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
+  "widgets": [
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Investigations finished",
+        "requests": [{ "q": "sum:firstlight.ai.investigations{$env,status:done}.as_count()", "aggregator": "sum" }],
+        "precision": 0
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Right by the injected fault, %",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "right",
+                "query": "sum:firstlight.ai.rca{$env,result:correct}.as_count()",
+                "aggregator": "sum"
+              },
+              {
+                "data_source": "metrics",
+                "name": "scored",
+                "query": "sum:firstlight.ai.rca{$env}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [{ "formula": "100 * right / scored" }]
+          }
+        ],
+        "precision": 0,
+        "autoscale": false
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Investigation time, s",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:firstlight.ai.latency_ms{$env} by {model} / 1000",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Scored against the injected fault",
+        "show_legend": true,
+        "requests": [{ "q": "sum:firstlight.ai.rca{$env} by {result}.as_count()", "display_type": "bars" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "Every investigation is a trace in **LLM Observability** (ml app `firstlight-investigator`): the agent span, each read-only tool it called, the Gemini calls with their tokens, and five evaluations — agrees with the rules, explains an unknown, grounded, farmer message OK, and right by the injected fault.",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false,
+        "has_padding": true
+      }
+    }
+  ]
+}

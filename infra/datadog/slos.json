@@ -1,0 +1,26 @@
+[
+  {
+    "key": "oxygen_safety",
+    "name": "Firstlight · Oxygen safety",
+    "description": "Share of the time no pond is forecast to reach 3 mg/L within 30 minutes: the pond as a service.",
+    "monitors": ["hypoxia_forecast"],
+    "target": 99.5,
+    "timeframe": "7d"
+  },
+  {
+    "key": "visibility",
+    "name": "Firstlight · Every pond seen",
+    "description": "Share of the time every gateway's ponds have reported within the last minute.",
+    "monitors": ["gateway_blind"],
+    "target": 99.0,
+    "timeframe": "7d"
+  },
+  {
+    "key": "ingest_latency",
+    "name": "Firstlight · Ingest under 500 ms",
+    "description": "Share of the time ingest p95 stays under half a second.",
+    "monitors": ["slow_ingest"],
+    "target": 99.0,
+    "timeframe": "7d"
+  }
+]

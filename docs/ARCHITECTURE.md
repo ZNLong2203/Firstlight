@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** as built on 17/10/2026. Numbers come from the demo host unless marked *target*. The services are instrumented for Datadog (ddtrace, DogStatsD, LLM Observability), and the webhook that Datadog monitors call is live. Dashboards and monitors are applied once the Datadog account is active; until then the brain's own detection runs everything described here.
+> **Status:** as built on 17/10/2026. Numbers come from the demo host unless marked *target*. Datadog is live on a test org: APM, logs, metrics and LLM Observability from every service, with monitors, SLOs and dashboards kept as code in `infra/datadog/`. The brain's own detection does not depend on it: everything described here also runs with Datadog unreachable.
 
 Firstlight runs the night shift for shrimp ponds. It forecasts how many minutes each pond has before it runs short of oxygen. It works out whether an alarm comes from the pond, the probe or the data path, acts within seconds, and proves the pond recovered.
 
@@ -229,7 +229,7 @@ A key has at most one open incident; later alerts for the same key join it. Each
 | Environment | Composition | Purpose |
 |---|---|---|
 | Local | `make up` starts the profiles in `COMPOSE_PROFILES`: `localdb` (`mongodb/mongodb-atlas-local:8.0.34`), `datadog` (Agent), `app` (api, brain, edge, web) | Development |
-| Demo | One VM in Singapore (2 vCPU, 8 GB, about 9 USD a month) runs the same compose file with `COMPOSE_PROFILES=localdb,app,proxy`, plus `datadog` once the account is active. Caddy serves HTTPS, and MongoDB runs next to the app. | The public demo and the webhook endpoints. The simulator runs 24/7, with the farm clock on Vietnam time. |
+| Demo | One VM in Singapore (2 vCPU, 8 GB, about 9 USD a month) runs the same compose file with `COMPOSE_PROFILES=localdb,app,proxy,datadog`. Caddy serves HTTPS, and MongoDB runs next to the app. | The public demo and the webhook endpoints. The simulator runs 24/7, with the farm clock on Vietnam time. |
 | CI | GitHub Actions: ruff, mypy, and pytest against an `atlas-local` service container; the console's typecheck and build; images pushed to GHCR, tagged with the git sha | Quality gate and the images to deploy |
 
 `scripts/deploy.sh --build` builds the images on the VM. `scripts/release.sh` starts a given version of the API for the bad-deploy scenario and rolls it back.

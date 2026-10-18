@@ -1,0 +1,166 @@
+{
+  "title": "Firstlight · Night watch",
+  "description": "The ponds as services: oxygen across the estate, the ponds closest to 3 mg/L, the incidents and their proof. Managed by infra/datadog/apply.py.",
+  "layout_type": "ordered",
+  "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
+  "widgets": [
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Lowest oxygen now, mg/L",
+        "requests": [
+          {
+            "q": "min:firstlight.pond.do{$env}",
+            "aggregator": "last",
+            "conditional_formats": [
+              { "comparator": "<", "value": 3, "palette": "white_on_red" },
+              { "comparator": "<", "value": 4, "palette": "white_on_yellow" },
+              { "comparator": ">=", "value": 4, "palette": "white_on_green" }
+            ]
+          }
+        ],
+        "precision": 2,
+        "autoscale": false
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Soonest pond to 3 mg/L, minutes",
+        "requests": [
+          {
+            "q": "min:firstlight.pond.minutes_to_hypoxia{$env}",
+            "aggregator": "last",
+            "conditional_formats": [
+              { "comparator": "<", "value": 30, "palette": "white_on_red" },
+              { "comparator": "<", "value": 60, "palette": "white_on_yellow" },
+              { "comparator": ">=", "value": 60, "palette": "white_on_green" }
+            ]
+          }
+        ],
+        "precision": 0,
+        "autoscale": false
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Incidents opened",
+        "requests": [{ "q": "sum:firstlight.incident.opened{$env}.as_count()", "aggregator": "sum" }],
+        "precision": 0
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "False alarms stopped, nobody woken",
+        "requests": [{ "q": "sum:firstlight.false_alarm.prevented{$env}.as_count()", "aggregator": "sum" }],
+        "precision": 0
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Oxygen across the estate, mg/L",
+        "show_legend": true,
+        "legend_layout": "horizontal",
+        "requests": [
+          {
+            "q": "avg:firstlight.pond.do{$env}",
+            "display_type": "line",
+            "style": { "palette": "cool", "line_type": "solid", "line_width": "thick" },
+            "metadata": [{ "expression": "avg:firstlight.pond.do{$env}", "alias_name": "average pond" }]
+          },
+          {
+            "q": "min:firstlight.pond.do{$env}",
+            "display_type": "line",
+            "style": { "palette": "warm", "line_type": "dashed", "line_width": "normal" },
+            "metadata": [{ "expression": "min:firstlight.pond.do{$env}", "alias_name": "lowest pond" }]
+          }
+        ],
+        "markers": [
+          { "value": "y = 3", "display_type": "error dashed", "label": "stress" },
+          { "value": "y = 4", "display_type": "warning dashed", "label": "safe above" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Closest to 3 mg/L, minutes (600 = no risk in sight)",
+        "requests": [{ "q": "top(min:firstlight.pond.minutes_to_hypoxia{$env} by {pond}, 10, 'last', 'asc')" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Least oxygen now, by pond",
+        "requests": [{ "q": "top(min:firstlight.pond.do{$env} by {pond}, 10, 'last', 'asc')" }]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Incidents by cause",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:firstlight.incident.opened{$env} by {cause}.as_count()",
+            "display_type": "bars",
+            "style": { "palette": "dog_classic" }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Time to detect, s (average)",
+        "requests": [{ "q": "avg:firstlight.incident.mttd_s{$env}", "aggregator": "avg" }],
+        "precision": 0
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Time to recover, min (average)",
+        "requests": [{ "q": "avg:firstlight.incident.mttr_min{$env}", "aggregator": "avg" }],
+        "precision": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "slo",
+        "title": "Oxygen safety",
+        "slo_id": "__SLO:oxygen_safety__",
+        "view_type": "detail",
+        "view_mode": "overall",
+        "time_windows": ["7d"],
+        "show_error_budget": true
+      }
+    },
+    {
+      "definition": {
+        "type": "slo",
+        "title": "Every pond seen",
+        "slo_id": "__SLO:visibility__",
+        "view_type": "detail",
+        "view_mode": "overall",
+        "time_windows": ["7d"],
+        "show_error_budget": true
+      }
+    },
+    {
+      "definition": {
+        "type": "manage_status",
+        "title": "Firstlight monitors",
+        "query": "tag:\"firstlight:managed\"",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+        "color_preference": "text",
+        "hide_zero_counts": true,
+        "sort": "status,asc"
+      }
+    }
+  ]
+}

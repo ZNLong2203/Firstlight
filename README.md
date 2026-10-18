@@ -47,7 +47,7 @@ make lint        # ruff, mypy and the web typecheck
 | `app` | `api`, `brain`, `edge`, `web` |
 | `proxy` | Caddy with automatic HTTPS for `PUBLIC_HOST` |
 
-The demo host runs `localdb,app,proxy`, plus `datadog` once the account is active, and is deployed with `scripts/deploy.sh`. `scripts/measure.py` times the queries and storage of a running deployment, and `scripts/loadtest.sh` runs a second stack at ten times the demo's farms.
+The demo host runs `localdb,app,proxy,datadog` and is deployed with `scripts/deploy.sh`; `scripts/datadog-apply.sh` creates the Datadog monitors, SLOs and dashboards from `infra/datadog/`. `scripts/measure.py` times the queries and storage of a running deployment, and `scripts/loadtest.sh` runs a second stack at ten times the demo's farms.
 
 ## Repository conventions
 
