@@ -207,15 +207,23 @@ def pond_checks(
 
 
 RELEASE_WINDOW = timedelta(minutes=15)
+RESTART_GAP = timedelta(minutes=1)  # the old API stops taking data before the new one records its start
+
+
+def silent_since(ponds: list[dict[str, Any]], now: datetime) -> datetime | None:
+    """When the data stopped: the newest reading among the ponds that have gone silent."""
+    silent = [p for p in ponds if p.get("last") and (now - p["last"]["ts"]).total_seconds() > STALE_S]
+    return max((p["last"]["ts"] for p in silent), default=None)
 
 
 def recent_release(releases: list[dict[str, Any]], silent_from: datetime | None) -> dict[str, Any] | None:
-    """The API release that started shortly before the data stopped, with the version it replaced."""
+    """The API release that started shortly before the data stopped, with the version it replaced. A release
+    that broke ingest outright starts a few seconds after the last reading, which the old version took."""
     if silent_from is None:
         return None
     for i, release in enumerate(releases):  # newest first
         started = release["started_at"]
-        if started <= silent_from and silent_from - started <= RELEASE_WINDOW:
+        if -RESTART_GAP <= silent_from - started <= RELEASE_WINDOW:
             previous = next(
                 (r["version"] for r in releases[i + 1 :] if r["version"] != release["version"]), None
             )
@@ -240,7 +248,7 @@ def data_path_checks(
     silent = [p for p in scope_ponds if stale(p)]
     if not silent:
         return evidence
-    last_seen = max((p["last"]["ts"] for p in silent if p.get("last")), default=None)
+    last_seen = silent_since(silent, now)
     gateways = {p.get("gateway") for p in all_ponds}
     quiet_gateways = {g for g in gateways if all(stale(p) for p in all_ponds if p.get("gateway") == g)}
     evidence.append(
@@ -261,6 +269,7 @@ def data_path_checks(
                 "support",
                 0.7,
                 f"{len(quiet_gateways)} of {len(gateways)} gateways silent: the backend, not the 4G links",
+                last_seen,
             )
         )
         evidence.append(
@@ -269,13 +278,18 @@ def data_path_checks(
         release = recent_release(releases or [], last_seen)
         if release and last_seen:
             lead = (last_seen - release["started_at"]).total_seconds()
+            when = (
+                f"started {lead:.0f} s before the data stopped"
+                if lead >= 0
+                else f"took over {-lead:.0f} s after the last reading, and nothing has arrived since"
+            )
             evidence.append(
                 Evidence(
                     "release",
                     "ingest_regression",
                     "support",
                     0.35,
-                    f"firstlight-api {release['version']} started {lead:.0f} s before the data stopped"
+                    f"firstlight-api {release['version']} {when}"
                     + (f"; it replaced {release['previous']}" if release["previous"] else ""),
                     release["started_at"],
                 )

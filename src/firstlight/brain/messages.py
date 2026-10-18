@@ -57,10 +57,14 @@ def notify(
         release = diagnosis.get("release") or {}
         if release:
             back = f" Đề xuất: rollback về {release['previous']}." if release.get("previous") else ""
-            return (
-                f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}, ngay sau khi firstlight-api "
-                f"{release['version']} được deploy lúc {clock(release['started_at'], offset_hours)}.{back}"
+            version, onset = release["version"], diagnosis.get("onset")
+            when = (
+                f"trong lúc firstlight-api {version} được deploy"  # the data stopped with the restart
+                if onset and release["started_at"] >= onset
+                else f"ngay sau khi firstlight-api {version} được deploy lúc "
+                f"{clock(release['started_at'], offset_hours)}"
             )
+            return f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}, {when}.{back}"
         return f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}. Kiểm tra bản deploy gần nhất."
     return f"Ao {pond}: oxy {mg(do_now)} mg/L, chưa rõ nguyên nhân. Cần kiểm tra ao."
 

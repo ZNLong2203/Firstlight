@@ -30,6 +30,7 @@ from firstlight.brain.evidence import (
     pond_checks,
     pond_readings,
     recent_release,
+    silent_since,
 )
 from firstlight.brain.forecast import HYPOXIA_MGL, SAFE_MGL, TURNING_AMPS
 from firstlight.core import economics
@@ -42,6 +43,7 @@ Db = AsyncDatabase[Doc]
 
 STALE_S = 60
 FRESH_S = 30
+FLEET_HOLD_S = 20  # how long a gateway that went quiet waits to see whether the rest of the fleet follows
 RISK_MINUTES = 30
 FAST_DROP = -0.1  # mg/L per minute over 3 min: twice what a pond loses with its main aerator gone
 CONFIDENT = 0.5
@@ -101,16 +103,24 @@ def find_problems(states: list[Doc], covered: set[str], now: datetime) -> list[P
     problems: list[Problem] = []
     grouped: set[str] = set()
     quiet = [g for g, ps in by_gateway.items() if all(_stale(p, now) for p in ps)]
-    if len(by_gateway) >= 4 and len(quiet) * 2 > len(by_gateway):
+    fleet = len(by_gateway) >= 4
+    if fleet and len(quiet) * 2 > len(by_gateway):
         ponds = [p["_id"] for g in quiet for p in by_gateway[g]]
         problems.append(Problem("estate", "estate", None, None, ponds, ["fleet_silent"]))
         grouped.update(ponds)
     else:
+        # Gateways do not all stop in the same second. While most of the fleet has missed reports, a gateway
+        # that has just gone quiet waits to see whether the rest follow: a backend that stops taking data is
+        # one incident, not one for each gateway that happened to cross the line first.
+        fading = [g for g, ps in by_gateway.items() if all(_stale(p, now, FRESH_S) for p in ps)]
+        holding = fleet and len(fading) * 2 > len(by_gateway)
         for gateway in quiet:
             ponds = [p["_id"] for p in by_gateway[gateway]]
+            grouped.update(ponds)
+            if holding and not all(_stale(p, now, STALE_S + FLEET_HOLD_S) for p in by_gateway[gateway]):
+                continue
             farm = by_gateway[gateway][0].get("farm")
             problems.append(Problem(gateway, "gateway", farm, gateway, ponds, ["gateway_silent"]))
-            grouped.update(ponds)
     for farm, ps in by_farm.items():
         if len(ps) > 1 and all(not _stale(p, now) and _dark(p) for p in ps):
             ponds = [p["_id"] for p in ps]
@@ -222,8 +232,7 @@ async def investigate(
         evidence = data_path_checks(scope_states, states, now, releases)
         diagnosis = diagnose(evidence)
         if diagnosis.cause == "ingest_regression":
-            silent_from = (incident.get("at_detection") or {}).get("last_seen")
-            diagnosis.release = recent_release(releases, silent_from)
+            diagnosis.release = recent_release(releases, silent_since(scope_states, now))
         return evidence, diagnosis, rows
     else:
         rows = await pond_readings(db, incident["ponds"][0], now)
@@ -837,8 +846,8 @@ async def incident_cycle(db: Db, metrics: Metrics, policy: Policy, now: datetime
     for problem in find_problems(states, set(), now):
         active.add(problem.key)
         active.update(problem.ponds)
-        if problem.key in open_keys or (problem.scope == "pond" and problem.key in covered):
-            continue
+        if problem.key in open_keys or set(problem.ponds) <= covered:
+            continue  # its ponds are already in an open incident, as gateways are while the fleet comes back
         if incident := await open_incident(db, problem, by_id, now):
             open_incidents.append(incident)
     for incident in open_incidents:

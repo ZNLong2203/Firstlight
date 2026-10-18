@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 from tests.conftest import DEMO_CODE
 
-from firstlight.brain.evidence import Evidence, diagnose
+from firstlight.brain.evidence import Evidence, diagnose, recent_release
 from firstlight.brain.incidents import Policy, find_problems, incident_cycle, recovered
 from firstlight.brain.main import forecast_once
 from firstlight.brain.playbooks import ensure_playbooks
@@ -257,13 +257,18 @@ async def test_backend_regression_is_traced_to_the_release_that_caused_it(
     client, db = api
     harness = Harness(client, db, farms=5)
     await harness.start()
-    releases = [("1.3", harness.now - timedelta(hours=2)), ("1.4", harness.now)]
+    # What release 1.4 does to ingest, seen from outside: most gateways stop getting their batches in,
+    # not all in the same second.
+    gateways = list(harness.world.gateways.values())[:4]
+    for pair in (gateways[:2], gateways[2:]):
+        for gateway in pair:
+            gateway.online = False
+        await harness.tick()
+    # 1.4 records its start once it is up: after the last batch, which the old version took.
+    releases = [("1.3", harness.now - timedelta(hours=2)), ("1.4", harness.now - timedelta(seconds=5))]
     await db.deployments.insert_many(
         [{"service": "firstlight-api", "version": v, "started_at": t, "config": {}} for v, t in releases]
     )
-    # What release 1.4 does to ingest, seen from outside: most gateways stop getting their batches in.
-    for gateway in list(harness.world.gateways.values())[:4]:
-        gateway.online = False
     monitoring = await harness.until("estate", "monitoring", limit=10)
     diagnosis = monitoring["diagnosis"]
     assert monitoring["scope"] == "estate" and diagnosis["cause"] == "ingest_regression"
@@ -271,7 +276,45 @@ async def test_backend_regression_is_traced_to_the_release_that_caused_it(
     message = next(e["text"] for e in monitoring["timeline"] if e["kind"] == "notify")
     assert "1.4" in message and "rollback về 1.3" in message
 
-    for gateway in harness.world.gateways.values():  # rolled back: the batches get in again
-        gateway.online = True
+    for pair in (gateways[:2], gateways[2:]):  # rolled back: the batches get in again
+        for gateway in pair:
+            gateway.online = True
+        await harness.tick()
     resolved = await harness.until("estate", "resolved", limit=6)
     assert resolved["metrics"]["coverage"] >= 0.95
+    assert await db.incidents.count_documents({"scope": "gateway"}) == 0, (
+        "going quiet and coming back gateway by gateway is still one incident"
+    )
+
+
+def test_a_fleet_going_quiet_waits_to_be_one_problem() -> None:
+    now = datetime.now(UTC)
+
+    def gateway(farm: str, silent_s: float) -> list[dict[str, Any]]:
+        ts = now - timedelta(seconds=silent_s)
+        last = {"ts": ts, "do": 5.0, "aerators_on": 3, "aerators_running": 3, "probe_q": 1.0}
+        pond = {"farm": farm, "gateway": f"GW-{farm}", "last": last}
+        return [{"_id": f"{farm}-0{i}", **pond} for i in range(3)]
+
+    def keys(*silences: float) -> list[str]:
+        states = [s for farm, silent in zip("ABCDE", silences, strict=True) for s in gateway(farm, silent)]
+        return [p.key for p in find_problems(states, set(), now)]
+
+    assert keys(65, 62, 55, 50, 45) == [], "two crossed the line first; the rest of the fleet follows"
+    assert keys(65, 5, 5, 5, 5) == ["GW-A"], "quiet while the others report: that gateway's own problem"
+    assert keys(85, 50, 45, 40, 35) == ["GW-A"], "the fleet slowed but never stopped: it waits no longer"
+
+
+def test_a_release_that_stopped_ingest_starts_just_after_the_last_reading() -> None:
+    now = datetime.now(UTC)
+    releases = [  # newest first
+        {"version": "1.4", "started_at": now},
+        {"version": "1.3", "started_at": now - timedelta(minutes=2)},
+    ]
+    assert recent_release(releases, now - timedelta(seconds=8)) == {
+        "version": "1.4",
+        "previous": "1.3",
+        "started_at": now,
+    }, "the old version took the last batch; 1.4 took nothing"
+    earlier = recent_release(releases, now - timedelta(seconds=90))
+    assert earlier and earlier["version"] == "1.3", "data that stopped well before 1.4 is not 1.4's doing"
