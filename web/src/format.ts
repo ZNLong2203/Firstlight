@@ -168,8 +168,10 @@ export function describe(entry: TimelineEntry): string {
       return `AI investigator: ${CAUSE_LABEL[text("cause")] ?? text("cause")}${verdict}`;
     }
     case "datadog": {
+      const count = Number(entry.count ?? 1);
+      const groups = count > 1 ? ` on ${count} ${entry.per ? `${text("per")}s` : "groups"}` : "";
       const after = entry.after_brain_s != null ? `, ${text("after_brain_s")} s after Firstlight` : "";
-      return `Datadog ${text("transition")}: ${text("monitor")}${after}`;
+      return `Datadog ${text("transition")}: ${text("monitor")}${groups}${after}`;
     }
     case "escalated":
       return `Escalated: ${ESCALATION_LABEL[text("detail")] ?? text("detail")}`;

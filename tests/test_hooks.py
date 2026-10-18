@@ -52,6 +52,25 @@ async def test_datadog_confirms_what_the_brain_already_handles(api: tuple[httpx.
     )
 
 
+async def test_a_monitor_alerting_on_every_pond_is_one_line(api: tuple[httpx.AsyncClient, Any]) -> None:
+    harness = Harness(*api)
+    await harness.start()
+    harness.world.apply(FaultRequest(id="CH-T5", kind="power_outage", farm="ST-01"), harness.now)
+    incident = await harness.until("ST-01", "awaiting_approval", limit=6)
+    ponds = sorted(incident["ponds"])
+    alerts = [alert("Triggered", pond, f"cycle-{i}") for i, pond in enumerate(ponds)]
+    for body in [*alerts, alert("Recovered", ponds[0], "cycle-0")]:
+        await harness.client.post("/v1/hooks/datadog", json=body, headers=SIGNED)
+    await harness.tick()
+    linked = await harness.db.incidents.find_one({"_id": incident["_id"]})
+    datadog = [e for e in linked["timeline"] if e["kind"] == "datadog"]
+    lines = [(e["transition"], e["count"], e["per"], e["monitor"]) for e in datadog]
+    assert lines == [
+        ("triggered", len(ponds), "pond", "Hypoxia forecast under 30 min"),
+        ("recovered", 1, "pond", "Hypoxia forecast under 30 min"),
+    ], "one line per run of the same transition, not one per pond"
+
+
 async def test_an_alert_the_rules_cannot_explain_waits_for_a_person(
     api: tuple[httpx.AsyncClient, Any],
 ) -> None:

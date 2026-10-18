@@ -11,6 +11,7 @@ to it is down. A Datadog alert for the same pond lands on the same open incident
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -762,6 +763,38 @@ def _alert_problem(alert: Doc, states: list[Doc], by_id: dict[str, Doc]) -> Prob
     return None
 
 
+async def note_alert(db: Db, incident: Doc, alert: Doc) -> None:
+    """Put a Datadog alert on the incident's timeline. A monitor alerts once per group, so an estate-wide
+    incident hears from every gateway: alerts that repeat the monitor's last transition add to its count."""
+    monitor = alert.get("monitor_id") or alert.get("title")
+    seen = [e for e in incident["timeline"] if e["kind"] == "datadog" and e.get("monitor_id") == monitor]
+    last = seen[-1] if seen else None
+    if last and last["transition"] == alert["transition"] and last.get("alert"):
+        await db.incidents.update_one(
+            {"_id": incident["_id"]},
+            {"$inc": {"timeline.$[d].count": 1}},
+            array_filters=[{"d.alert": last["alert"]}],
+        )
+        last["count"] = last.get("count", 1) + 1
+        return
+    lead = round((alert["received_at"] - incident["opened_at"]).total_seconds())
+    targets = alert.get("targets") or {}
+    entry = {
+        "t": alert["received_at"],
+        "kind": "datadog",
+        "transition": alert["transition"],
+        "monitor": re.sub(r"^\[[^\]]*\]\s*", "", alert.get("title") or ""),  # "[Triggered on {...}] Name"
+        "monitor_id": monitor,
+        "alert": str(alert["_id"]),
+        "count": 1,
+        "per": next((scope for scope in ("pond", "gateway", "farm") if scope in targets), None),
+        "link": alert.get("link"),
+        "after_brain_s": lead if incident.get("detected_by") == "brain" else None,
+    }
+    await db.incidents.update_one({"_id": incident["_id"]}, {"$push": {"timeline": entry}})
+    incident["timeline"].append(entry)
+
+
 async def process_alerts(
     db: Db, states: list[Doc], by_id: dict[str, Doc], open_incidents: list[Doc], now: datetime
 ) -> None:
@@ -780,17 +813,7 @@ async def process_alerts(
                 None,
             )
         if incident:
-            lead = round((alert["received_at"] - incident["opened_at"]).total_seconds())
-            entry = {
-                "t": alert["received_at"],
-                "kind": "datadog",
-                "transition": alert["transition"],
-                "monitor": alert.get("title"),
-                "link": alert.get("link"),
-                "after_brain_s": lead if incident.get("detected_by") == "brain" else None,
-            }
-            await db.incidents.update_one({"_id": incident["_id"]}, {"$push": {"timeline": entry}})
-            incident["timeline"].append(entry)
+            await note_alert(db, incident, alert)
             update: Doc = {"status": "linked", "incident": incident["_id"]}
         elif problem and alert["transition"] in TRIGGERS:
             opened = await open_incident(db, problem, by_id, now, source="datadog")
