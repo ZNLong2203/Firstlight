@@ -56,7 +56,7 @@ An earlier run, before the 3-minute rate signal existed, needed 90 s and only ca
 
 ## 3. Slow ingest after a deploy
 
-`scripts/release.sh 1.4 --regression` starts `firstlight-api` 1.4, and only the API container is recreated. The release adds a duplicate check based on the rule "a gateway never sends the same sequence number twice". The check looks up `ingest_batches` by `{gateway, seq}`, and no index covers that. Every batch therefore pays for a collection scan of a day of batches: `explain()` measured about 150 ms over 283,000 documents. Once ingest is slow enough for gateways to time out, they buffer, and ponds across the fleet turn **blind**. The run on the demo host will show how quickly that happens.
+`scripts/release.sh 1.4 --regression` starts `firstlight-api` 1.4, and only the API container is recreated. The release adds a duplicate check based on the rule "a gateway never sends the same sequence number twice". The check looks up `ingest_batches` by `{gateway, seq}`, and no index covers that. It also landed inside the loop over the batch's readings, so a batch pays for one collection scan of a day of batches per reading: an N+1 query. One scan measured 258 ms over 429,000 documents, so a batch of four readings costs about a second. At five batches a second, that is more scanning than the host's two cores can do. Once ingest is slow enough for gateways to time out, they buffer, and ponds across the fleet turn **blind**. The run on the demo host will show how quickly that happens.
 
 | What Firstlight sees | Where |
 |---|---|
