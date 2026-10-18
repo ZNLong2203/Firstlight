@@ -51,7 +51,6 @@ class Settings(BaseSettings):
     edge_control_url: str = "http://localhost:9000"  # the API reaches the simulator's control port here
     edge_control_port: int = 9000
     sim_farms: int = 50
-    sim_ponds_per_farm: int = 4
     sim_batch_seconds: int = 10
     # Farm clock = UTC + offset: Vietnam time. The simulated ponds follow the real day and night there.
     sim_farm_clock_offset_hours: float = 7.0

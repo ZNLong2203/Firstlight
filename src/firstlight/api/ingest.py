@@ -79,6 +79,12 @@ async def put_manifest(gateway_id: str, manifest: GatewayManifest, request: Requ
             )
         )
     await db.devices.bulk_write(devices, ordered=False)
+    # The manifest is the truth about the gateway's ponds: a pond it no longer lists has been retired,
+    # and would otherwise look silent forever.
+    listed = [pond.id for pond in manifest.ponds]
+    await db.pond_state.delete_many({"gateway": manifest.gateway, "_id": {"$nin": listed}})
+    retired = {"gateway": manifest.gateway, "type": {"$ne": "gateway"}, "pond": {"$nin": listed}}
+    await db.devices.delete_many(retired)
     await db.pond_state.bulk_write(
         [
             UpdateOne(

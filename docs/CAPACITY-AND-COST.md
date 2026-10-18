@@ -4,7 +4,7 @@
 
 ## What one host carries
 
-`scripts/loadtest.sh` starts a second API, brain and simulator on the demo host, writing to a database of its own. The demo's 200 ponds keep running beside it, so the host carries both. Each simulated gateway sends a batch every 10 seconds for its four ponds. Every minute the script records:
+`scripts/loadtest.sh` starts a second API, brain and simulator on the demo host, writing to a database of its own. The demo's 200 ponds keep running beside it, so the host carries both. Each simulated gateway sends a batch every 10 seconds for its farm's ponds, four on average. Every minute the script records:
 - readings stored per second;
 - how old each pond's newest reading is;
 - the brain's cycle time;
@@ -43,7 +43,7 @@ At 1,200 ponds per host, the load measured above with room to spare. List prices
 
 The custom metrics per pond are:
 - six gauges tagged with the pond: oxygen, temperature, pH, aerators off, minutes to hypoxia and freshness;
-- the gateway's ingest-lag distribution, which counts five times, and its readings count, both shared by its four ponds.
+- the gateway's ingest-lag distribution, which counts five times, and its readings count, both shared by the farm's ponds, four on average.
 
 The Gemini cost comes from the demo's 9 investigations so far:
 - to investigate, 11,500 input tokens and 500 output tokens on average;

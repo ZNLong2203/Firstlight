@@ -11,7 +11,7 @@ import uvicorn
 
 from firstlight.core.config import get_settings
 from firstlight.edge.control import control_app
-from firstlight.edge.farms import Farm, build_farms
+from firstlight.edge.farms import Farm, build_estate
 from firstlight.edge.gateway import Gateway
 from firstlight.edge.world import World
 
@@ -54,7 +54,7 @@ async def announce(client: httpx.AsyncClient, farm: Farm) -> None:
 async def run() -> None:
     settings = get_settings()
     rng = random.Random(7)
-    farms = build_farms(settings.sim_farms, settings.sim_ponds_per_farm)
+    farms = build_estate(settings.sim_farms)
     gateways = [Gateway(farm) for farm in farms]
     world = World(farms, gateways)
     offset = settings.sim_farm_clock_offset_hours

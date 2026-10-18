@@ -44,6 +44,20 @@ async def test_manifest_registers_devices_and_seeds_pond_state(api: tuple[httpx.
     assert pond["standby"] == [a.id for a in FARM.ponds[0].aerators if a.standby]
 
 
+async def test_a_pond_left_out_of_the_manifest_is_retired(api: tuple[httpx.AsyncClient, Any]) -> None:
+    """Otherwise a pond taken out of service would look silent, and blind, forever."""
+    client, db = api
+    url = f"/v1/gateways/{FARM.gateway}/manifest"
+    full = FARM.manifest()
+    assert (await client.put(url, json=full.model_dump(mode="json"))).status_code == 200
+    smaller = full.model_copy(update={"ponds": full.ponds[:2]})
+    assert (await client.put(url, json=smaller.model_dump(mode="json"))).status_code == 200
+    kept = {p.id for p in smaller.ponds}
+    assert {s["_id"] async for s in db.pond_state.find({"gateway": FARM.gateway})} == kept
+    assert {d["pond"] async for d in db.devices.find({"type": {"$ne": "gateway"}})} == kept
+    assert await db.devices.find_one({"_id": FARM.gateway}) is not None
+
+
 async def test_ingest_stores_once_and_never_rewinds_pond_state(api: tuple[httpx.AsyncClient, Any]) -> None:
     client, db = api
     gateway = Gateway(FARM)

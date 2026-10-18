@@ -2,7 +2,7 @@ import random
 from datetime import UTC, datetime
 
 from firstlight.core.models import GatewayManifest, PondReading
-from firstlight.edge.farms import build_farms
+from firstlight.edge.farms import build_estate, build_farms
 from firstlight.edge.physics import Pond, Probe
 
 FARMS = build_farms(50, 4)
@@ -20,6 +20,18 @@ def minutes_below(pond: Pond, rng: random.Random, target: float, limit: int = 24
         if pond.do < target:
             return minute
     return limit + 1
+
+
+def test_the_simulated_estate_is_uneven_like_a_real_one() -> None:
+    estate = build_estate(50)
+    ponds = [p for f in estate for p in f.ponds]
+    farms = {code: sum(1 for f in estate if f.id.startswith(code)) for code in ("CM", "BL", "ST", "BT", "KG")}
+    assert farms == {"CM": 14, "BL": 12, "ST": 10, "BT": 8, "KG": 6}
+    sizes = {len(f.ponds) for f in estate}
+    assert min(sizes) >= 2 and max(sizes) <= 6 and len(sizes) > 2
+    assert len(ponds) == 200 and len({p.id for p in ponds}) == 200
+    again = [p.id for f in build_estate(50) for p in f.ponds]
+    assert [p.id for p in ponds] == again, "the same estate every run"
 
 
 def test_estate_layout() -> None:

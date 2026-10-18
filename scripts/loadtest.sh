@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Load test on the demo host: a second API, brain and simulator with N farms (4 ponds each) on the
+# Load test on the demo host: a second API, brain and simulator with N farms (4 ponds each on average) on the
 # demo's MongoDB, in a database of their own, so the demo's data is untouched. Every minute it prints
 # the ingest rate, how fresh every pond is, how old the forecasts are, MongoDB operations and resource
 # use. At the end it removes what it started and drops the database. It stops early if the demo's
@@ -66,7 +66,7 @@ trap cleanup EXIT
 run load-api "$IMAGE" api
 run load-brain "$IMAGE" brain
 sleep 8
-run load-edge -e FIRSTLIGHT_API_URL=http://load-api:8000 -e SIM_FARMS="$FARMS" -e SIM_PONDS_PER_FARM=4 \
+run load-edge -e FIRSTLIGHT_API_URL=http://load-api:8000 -e SIM_FARMS="$FARMS" \
   -e SIM_BATCH_SECONDS=10 "$IMAGE" edge
 echo "load: $FARMS farms, $((FARMS * 4)) ponds, $FARMS gateways, for $MINUTES min (image $IMAGE)"
 
