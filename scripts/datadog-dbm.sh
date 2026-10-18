@@ -19,6 +19,7 @@ grep -q '^MONGODB_QUERY_STATS_RATE=' .env || echo "MONGODB_QUERY_STATS_RATE=1" >
 
 program=$(mktemp)
 trap 'rm -f "$program"' EXIT
+chmod 644 "$program"  # the program only: the password goes through stdin
 cat > "$program" <<'PY'
 import os
 import sys
