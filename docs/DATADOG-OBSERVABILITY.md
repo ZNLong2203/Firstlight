@@ -161,14 +161,17 @@ The console's AI panel shows these numbers from `GET /v1/incidents/ai/stats`.
 
 ## Proof of recovery
 
-When an incident resolves, the brain creates a notebook through `POST /api/v1/notebooks` containing:
+Every closed incident gets a notebook, written by the brain through `POST /api/v1/notebooks` (`src/firstlight/brain/notebooks.py`) once the AI postmortem is in, or 10 minutes after the close without one. It covers 10 minutes before the onset to 10 minutes after the close, and holds:
 
-- a summary cell with cause, actions, lead time, MTTR and oxygen debt;
-- DO and `minutes_to_hypoxia` for the pond from 10 minutes before detection to 10 minutes after recovery;
-- the ack latency of the commands sent;
-- links to the incident's traces and logs.
+- a summary: cause and confidence, whether the AI investigator agrees, how fast it was detected and acted on, how long recovery took, the lowest DO and minutes under 4 mg/L, the blind spell and how much of it the backlog recovered, the shrimp at stake, the evidence, the actions with how fast the gateway confirmed each, and the timeline;
+- graphs chosen by the plane of the cause:
+  - pond: DO with the safe and hypoxia lines, the forecast minutes to hypoxia, and aerators on but not turning;
+  - sensor: DO beside pH, which follows the real oxygen while a fouled probe moves DO alone;
+  - data path: readings stored beside batches answered as duplicates, seconds since each gateway's last reading, and ingest latency by version;
+- the AI postmortem and its follow-ups;
+- links to the incident in the console, and to its traces and logs in Datadog.
 
-The notebook link is stored on the incident.
+The link is stored on the incident and shown under its proof in the console. The call has a 15 s timeout and runs beside the brain's loop, never inside it; a refused notebook is tried twice more. The brain needs `DD_API_KEY` and `DD_APP_KEY` for it; an application key scoped to `notebooks_write` is enough.
 
 ## Before the trial ends
 

@@ -175,6 +175,8 @@ export function describe(entry: TimelineEntry): string {
     }
     case "escalated":
       return `Escalated: ${ESCALATION_LABEL[text("detail")] ?? text("detail")}`;
+    case "notebook":
+      return "The proof of recovery is in a Datadog notebook";
     case "resolved":
       return entry.gap ? "Data back; the blind spell was checked" : entry.note ? `Closed: ${text("note")}` : "Recovered";
     default:

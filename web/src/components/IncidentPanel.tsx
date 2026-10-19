@@ -129,6 +129,16 @@ function Proof({ incident }: { incident: Incident }) {
           </div>
         ))}
       </dl>
+      {incident.notebook?.url && (
+        <a
+          href={incident.notebook.url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-block text-[12.5px] text-dawn-soft underline-offset-4 hover:underline"
+        >
+          The graphs, in a Datadog notebook ↗
+        </a>
+      )}
     </div>
   );
 }

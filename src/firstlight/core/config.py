@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     dd_version: str = "dev"
     dd_service: str = "firstlight"
     dd_trace_enabled: bool = False
+    # For the brain's notebooks: Datadog's API takes both keys. The Agent needs neither of them from here.
+    dd_site: str = ""
+    dd_api_key: str = ""
+    dd_app_key: str = ""
     dd_agent_host: str = "localhost"
     dd_dogstatsd_port: int = 8125
 

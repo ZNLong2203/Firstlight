@@ -184,6 +184,7 @@ export interface Incident {
     summary?: string;
   }[];
   postmortem?: { status: string; title?: string; postmortem_md?: string; follow_ups?: string[] };
+  notebook?: { status: string; url?: string };
   evals?: {
     agrees_with_rules?: boolean;
     explained_unknown?: boolean;

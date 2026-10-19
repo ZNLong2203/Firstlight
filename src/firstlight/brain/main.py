@@ -14,6 +14,7 @@ from firstlight.ai.memory import ensure_search_indexes
 from firstlight.brain.ai_worker import AiWorker
 from firstlight.brain.forecast import classify, forecast_pipeline
 from firstlight.brain.incidents import Policy, incident_cycle
+from firstlight.brain.notebooks import NotebookWriter
 from firstlight.brain.notifier import Notifier
 from firstlight.brain.playbooks import ensure_playbooks
 from firstlight.brain.reports import dawn_report_due
@@ -111,6 +112,7 @@ async def run() -> None:
     ai = AiWorker(db, gemini, metrics)
     telegram = Telegram(settings)
     notifier = Notifier(db, telegram, settings)
+    notebooks = NotebookWriter(db, settings)
     done: dict[str, datetime] = {}
     loop = asyncio.get_running_loop()
     cycles = 0
@@ -133,6 +135,7 @@ async def run() -> None:
                     if telegram.enabled:
                         await telegram.send(telegram.chat, reports[0]["message_vi"])
                 await ai.cycle(now)
+                await notebooks.cycle(now)
                 elapsed = round(loop.time() - started, 2)
                 metrics.distribution("firstlight.brain.cycle_s", elapsed)
                 ctx = {"ponds": counts, "open_incidents": open_incidents, "cycle_s": elapsed}
