@@ -304,9 +304,9 @@ class NotebookWriter:
         self.env, self.host = settings.dd_env, app_host(settings.dd_site)
         self.offset_hours = settings.sim_farm_clock_offset_hours
         self.public = settings.public_host if settings.public_host not in ("", "localhost") else None
-        headers = {"DD-API-KEY": settings.dd_api_key, "DD-APPLICATION-KEY": settings.dd_app_key}
+        self._headers = {"DD-API-KEY": settings.dd_api_key, "DD-APPLICATION-KEY": settings.dd_app_key}
         self._client = client or httpx.AsyncClient(
-            base_url=f"https://api.{settings.dd_site}", headers=headers, timeout=TIMEOUT_S
+            base_url=f"https://api.{settings.dd_site}", timeout=TIMEOUT_S
         )
         self._task: asyncio.Task[bool] | None = None
 
@@ -341,7 +341,7 @@ class NotebookWriter:
         commands = await self.db.commands.find({"incident": incident["_id"]}).to_list()
         body = notebook(incident, commands, self.env, self.host, self.public, self.offset_hours)
         try:
-            response = await self._client.post("/api/v1/notebooks", json=body)
+            response = await self._client.post("/api/v1/notebooks", json=body, headers=self._headers)
             response.raise_for_status()
             notebook_id = response.json()["data"]["id"]
         except (httpx.HTTPError, KeyError, ValueError) as exc:
