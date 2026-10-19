@@ -14,7 +14,6 @@ from firstlight.core.telegram import Telegram
 SETTINGS = Settings(
     telegram_bot_token="123:abc",
     telegram_chat_id="100",
-    telegram_escalation_chat_id="200",
     public_host="demo.example",
 )
 
@@ -27,7 +26,7 @@ def fake_telegram(sent: list[dict[str, Any]]) -> Telegram:
     return Telegram(SETTINGS, httpx.AsyncClient(transport=httpx.MockTransport(handle)))
 
 
-async def test_messages_go_out_with_buttons_and_escalate_when_nobody_answers(
+async def test_messages_go_out_with_buttons_and_remind_when_nobody_answers(
     api: tuple[httpx.AsyncClient, Any],
 ) -> None:
     _, db = api
@@ -58,9 +57,9 @@ async def test_messages_go_out_with_buttons_and_escalate_when_nobody_answers(
     await notifier.cycle(now + timedelta(minutes=1))
     assert len(sent) == 1, "nothing new before three minutes"
     await notifier.cycle(now + timedelta(minutes=4))
-    assert sent[-1]["chat_id"] == "200" and sent[-1]["text"].startswith("⚠️ Chưa ai nhận")
+    assert sent[-1]["chat_id"] == "100" and sent[-1]["text"].startswith("⚠️ Chưa ai nhận")
     await notifier.cycle(now + timedelta(minutes=8))
-    assert len(sent) == 2, "escalated once"
+    assert len(sent) == 2, "reminded once"
 
 
 async def test_without_a_bot_messages_stay_in_the_console(api: tuple[httpx.AsyncClient, Any]) -> None:

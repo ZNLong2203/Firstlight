@@ -47,7 +47,6 @@ class Settings(BaseSettings):
     # Telegram: messages to the farm owner with an "acknowledged" button; off until a bot exists.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
-    telegram_escalation_chat_id: str = ""  # who hears when nobody acknowledges in 3 minutes
     telegram_webhook_secret: str = ""
     public_host: str = "localhost"  # links in messages open the console here
 

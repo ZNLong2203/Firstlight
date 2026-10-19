@@ -20,7 +20,6 @@ class Telegram:
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
         self.enabled = bool(settings.telegram_bot_token and settings.telegram_chat_id)
         self.chat = settings.telegram_chat_id
-        self.escalation_chat = settings.telegram_escalation_chat_id or settings.telegram_chat_id
         self._base = f"{API}/bot{settings.telegram_bot_token}"
         self._client = client or httpx.AsyncClient(timeout=8.0)
 

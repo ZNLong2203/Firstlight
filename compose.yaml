@@ -163,7 +163,6 @@ services:
       GOOGLE_SERVICE_ACCOUNT_B64: ${GOOGLE_SERVICE_ACCOUNT_B64:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      TELEGRAM_ESCALATION_CHAT_ID: ${TELEGRAM_ESCALATION_CHAT_ID:-}
       PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
     labels:
       com.datadoghq.tags.service: firstlight-brain

@@ -161,7 +161,7 @@ export function describe(entry: TimelineEntry): string {
     case "acknowledged":
       return `${text("by")} acknowledged on Telegram`;
     case "unacknowledged":
-      return "Nobody acknowledged in 3 min: sent to a second person";
+      return "Nobody acknowledged in 3 min: reminded on Telegram";
     case "ai_investigation": {
       const verdict =
         entry.agrees == null ? ", where the rules had no answer" : entry.agrees ? ", agrees with the rules" : ", disagrees with the rules";

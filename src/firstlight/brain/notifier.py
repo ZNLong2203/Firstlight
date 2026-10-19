@@ -2,7 +2,7 @@
 
 The playbook's notify steps and escalations append to `incident.outbox`. Each cycle the notifier sends
 what is pending, with a button to acknowledge and a link to the pond in the console. An owner message
-nobody acknowledged within three minutes, on an incident still open, is sent on to a second person.
+nobody acknowledged within three minutes, on an incident still open, is sent once more as a reminder.
 Without a bot, messages stay in the console and are marked so.
 """
 
@@ -28,7 +28,7 @@ class Notifier:
         self.public = settings.public_host if settings.public_host not in ("", "localhost") else None
 
     async def cycle(self, now: datetime) -> None:
-        await self._escalate_unacknowledged(now)
+        await self._remind_unacknowledged(now)
         async for incident in self.db.incidents.find({"outbox.status": "pending"}).limit(20):
             for i, item in enumerate(incident.get("outbox", [])):
                 if item.get("status") == "pending":
@@ -48,7 +48,7 @@ class Notifier:
                 {"_id": incident["_id"]}, {"$set": {f"{key}.status": "console"}}
             )
             return
-        chat = self.telegram.escalation_chat if item.get("escalation") else self.telegram.chat
+        chat = self.telegram.chat
         message_id = await self.telegram.send(chat, item["text"], self._buttons(incident))
         if message_id is None:
             tries = item.get("tries", 0) + 1
@@ -72,30 +72,25 @@ class Notifier:
             },
         )
 
-    async def _escalate_unacknowledged(self, now: datetime) -> None:
+    async def _remind_unacknowledged(self, now: datetime) -> None:
         waiting = {"to": "owner", "status": "sent", "sent_at": {"$lt": now - ACK_WAIT}}
         async for incident in self.db.incidents.find(
             {
                 "open": True,
                 "acknowledged_at": {"$exists": False},
-                "escalation_sent": {"$exists": False},
+                "reminded_at": {"$exists": False},
                 "outbox": {"$elemMatch": waiting},
             }
         ):
             first = next(item for item in incident["outbox"] if item.get("to") == "owner")
             text = f"⚠️ Chưa ai nhận sau 3 phút. {first['text']}"
+            reminder = {"to": "owner", "text": text, "status": "pending", "reminder": True, "at": now}
             await self.db.incidents.update_one(
                 {"_id": incident["_id"]},
                 {
-                    "$set": {"escalation_sent": now},
+                    "$set": {"reminded_at": now},
                     "$push": {
-                        "outbox": {
-                            "to": "escalation",
-                            "text": text,
-                            "status": "pending",
-                            "escalation": True,
-                            "at": now,
-                        },
+                        "outbox": reminder,
                         "timeline": {
                             "t": now,
                             "kind": "unacknowledged",
@@ -104,4 +99,4 @@ class Notifier:
                     },
                 },
             )
-            log.warning("incident unacknowledged, escalating", extra={"ctx": {"incident": incident["_id"]}})
+            log.warning("incident unacknowledged, reminding", extra={"ctx": {"incident": incident["_id"]}})

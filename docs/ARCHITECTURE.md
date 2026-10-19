@@ -21,7 +21,7 @@ Firstlight runs the night shift for shrimp ponds. It forecasts how many minutes 
 | **MongoDB 8.0** | Operational database: time series readings, live state, the command bus, incidents and incident memory, with Atlas Search and Vector Search. | `mongodb/mongodb-atlas-local:8.0.34` on the same host; the code runs unchanged on Atlas by changing `MONGODB_URI` |
 | **Datadog** | APM, logs, DogStatsD metrics, RUM and LLM Observability. Its monitors call the webhook. | Managed (SaaS) |
 | **Gemini on Vertex AI** | Investigates each incident with read-only tools. Writes the summary, the farmer's message and the postmortem, and embeds closed incidents for memory. It never decides an action. | `gemini-3.8-flash`, falling back to `gemini-3.5-flash`; `gemini-embedding-2` |
-| **Telegram** | Messages to the farmer with an acknowledge button. Escalation when nobody acknowledges. | Bot API |
+| **Telegram** | Messages to the farmer with an acknowledge button. A reminder when nobody acknowledges. | Bot API |
 
 ## 2. Design principles
 
@@ -116,7 +116,7 @@ On the demo so far, 9 incidents were investigated:
 3. The API holds **one** change stream on `commands` and forwards each command to the gateway's open SSE channel. A single stream, rather than one per gateway, keeps the connection pool small.
 4. The gateway applies the command and calls `POST /v1/commands/{id}/ack`. The incident timeline updates, and `firstlight.command.ack_latency_ms` is recorded.
 5. A command without an ack is retried after 15 s, at most three times. One that cannot be delivered within 2 minutes expires, and the incident escalates.
-6. Messages wait in the incident's outbox until the notifier delivers them to Telegram. Each carries an acknowledge button and a link to the pond. If nobody acknowledges within 3 minutes, it escalates once, to the escalation chat when one is set. The time to acknowledge (MTTA) goes into the record.
+6. Messages wait in the incident's outbox until the notifier delivers them to Telegram. Each carries an acknowledge button and a link to the pond. If nobody acknowledges within 3 minutes, the same chat gets one reminder. The time to acknowledge (MTTA) goes into the record.
 
 ### E. Proof of recovery
 
