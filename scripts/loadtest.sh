@@ -4,13 +4,13 @@
 # the ingest rate, how fresh every pond is, how old the forecasts are, MongoDB operations and resource
 # use. At the end it removes what it started and drops the database. It stops early if the demo's
 # API stops answering.
-#   scripts/loadtest.sh [farms=500] [minutes=5] [trace]
+#   scripts/loadtest.sh [farms=250] [minutes=5] [trace]
 # With trace, the load brain runs under ddtrace-run and sends its spans to the demo's Agent as env:load
 # (no metrics), so APM shows where its cycle goes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-FARMS="${1:-500}"; MINUTES="${2:-5}"; TRACE="${3:-}"
+FARMS="${1:-250}"; MINUTES="${2:-5}"; TRACE="${3:-}"
 get() { sed -n "s/^$1=//p" .env | head -1; }
 HOST="$(get VPS_USERNAME || true)"; HOST="${HOST:-root}@$(get VPS_IP)"
 

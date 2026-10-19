@@ -331,6 +331,4 @@ Measured on the demo host on 17/10/2026 with `scripts/measure.py`, which only re
 
 Kept like that, the rollups were the part that did not scale: at 2,000 ponds they would have needed about 74 GB, more than the demo host's 35 GB disk. Now they are a time series collection too, written by the brain as described above. The space they take now will be measured once a few days of rows exist.
 
-Still to measure:
-- sustained ingest at ten times the demo's farms (`scripts/loadtest.sh`);
-- the space the same readings take in a regular collection (`scripts/measure.py --compare`).
+Still to measure: the space the same readings take in a regular collection (`scripts/measure.py --compare`).

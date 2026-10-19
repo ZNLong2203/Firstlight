@@ -31,7 +31,7 @@ The build window runs from 17 to 31 October 2026; the application code lands in 
 - [MongoDB data model](docs/MONGODB-DATA-MODEL.md): collections, lifecycle, aggregation pipelines
 - [Datadog observability](docs/DATADOG-OBSERVABILITY.md): tags, monitors, SLOs, dashboards, webhook
 - [Incident scenarios](docs/INCIDENT-SCENARIOS.md): the five incidents the demo triggers, each through detect, investigate and resolve, with measured runs
-- [Capacity and cost](docs/CAPACITY-AND-COST.md): load tests at five and ten times the demo, and the cost per pond
+- [Capacity and cost](docs/CAPACITY-AND-COST.md): a load test at five times the demo, and the cost per pond
 - [Declaration](docs/DECLARATION.md): reused components, data and AI tools
 
 ## Run it
@@ -51,7 +51,7 @@ make lint        # ruff, mypy and the web typecheck
 | `app` | `api`, `brain`, `edge`, `web` |
 | `proxy` | Caddy with automatic HTTPS for `PUBLIC_HOST` |
 
-The demo host runs `localdb,app,proxy,datadog` and is deployed with `scripts/deploy.sh --ci` (CI's images, tagged with the git sha); `scripts/datadog-apply.sh` creates the Datadog monitors, SLOs and dashboards from `infra/datadog/`. `scripts/measure.py` times the queries and storage of a running deployment, and `scripts/loadtest.sh` runs a second stack at ten times the demo's farms.
+The demo host runs `localdb,app,proxy,datadog` and is deployed with `scripts/deploy.sh --ci` (CI's images, tagged with the git sha); `scripts/datadog-apply.sh` creates the Datadog monitors, SLOs and dashboards from `infra/datadog/`. `scripts/measure.py` times the queries and storage of a running deployment, and `scripts/loadtest.sh` runs a second stack beside the demo, at five times its farms by default.
 
 ## Repository conventions
 

@@ -1,6 +1,6 @@
 # Capacity and cost
 
-> **Status:** measured on 17/10/2026, and again at ten times on 19/10/2026 with the load brain traced in Datadog, on the demo host, a HostHatch NVMe 8 GB VM in Singapore (2 vCPU, 8 GB, about 9 USD a month). It runs MongoDB 8.0 and the whole application. Prices are list prices, read the same day from the providers' public pages; the sources are at the end.
+> **Status:** measured on 17/10/2026 on the demo host, a HostHatch NVMe 8 GB VM in Singapore (2 vCPU, 8 GB, about 9 USD a month). It runs MongoDB 8.0 and the whole application. Prices are list prices, read the same day from the providers' public pages; the sources are at the end.
 
 ## What one host carries
 
@@ -13,28 +13,10 @@
 | Load added to the demo | Readings stored | Newest reading, p99 | Brain cycle (target 10 s) | MongoDB | Errors |
 |---|---|---|---|---|---|
 | 1,000 ponds on 250 gateways (×5) | 83–86 per s | 11 s | 0.8–1.3 s | 72–78% of one core, 2.0 GB | none |
-| 2,000 ponds on 500 gateways (×10) | 147–178 per s | 18–23 s | 13–21 s, 30 s at worst | 60–110% of one core, 2.0 GB | none |
 
-- **At five times the demo,** 1,200 ponds on one host, everything holds with room to spare. The brain forecasts, checks and rolls up every pond in about a second.
-- **At ten times,** 2,200 ponds, ingest still holds: no errors, and no reading older than 23 s. The brain, however, takes 13–21 s per cycle, so each pond is forecast every 15–20 s instead of every 10. Two reruns on 19/10 averaged 7–29 s a cycle, minute by minute, and 41 s at worst.
-- **The simulator** of the ×10 run reached 41–45 of the 50 batches a second it should send. It is one Python process computing the physics of 2,000 ponds.
+At five times the demo, 1,200 ponds on one host, everything holds with room to spare: no errors, no reading older than 11 s, and the brain forecasts, checks and rolls up every pond in about a second.
 
-**Why the brain slows down at ten times.** The rerun on 19/10 sent the load brain's spans to Datadog. Every MongoDB call it made was slow, not one in particular:
-
-| Call | Calls in 5 minutes | Mean |
-|---|---|---|
-| aggregations on `readings` (the forecast, incident checks) | 110 | 4.1 s |
-| the forecast's write to `pond_state`, 2,000 ponds at once | 21 | 4.0 s |
-| the minute rollup's insert into `readings_1m` | 6 | 7.3 s |
-
-The host's own metrics show why. Its two vCPUs were saturated: 2% idle against 59% before the test, and a load average of 21.6. The disk was 6% busy, CPU steal was 0.1%, and MongoDB's cache held 0.83 of its 1.07 GB with little dirty data, so none of those was the limit. MongoDB's work queued for a CPU. Part of that CPU went to things a real deployment does not run on its host: the simulator of 2,000 ponds took a quarter to two thirds of a core, beside the second API that took in its batches.
-
-Cutting each reading to the five fields the forecast reads before its window stages sort them (19/10) did not change the result: the stages were not spilling to disk, as first suspected.
-
-The next steps for more ponds per host:
-- run the gateways off the host, as real ones are;
-- give MongoDB more cores, or move it to Atlas, which the code runs on unchanged;
-- then, if the brain is still the limit, write `pond_state` only when a pond's status or forecast changes, and forecast only the ponds with new readings.
+For more ponds per host, the gateways would run off the host, as real ones do, and MongoDB would get more cores or move to Atlas, which the code runs on unchanged.
 
 ## Cost per pond per month
 

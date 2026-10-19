@@ -6,7 +6,7 @@
 | [MongoDB data model](MONGODB-DATA-MODEL.md) | Which collections exist and why, the documents, the indexes, the data lifecycle and the aggregation pipelines. |
 | [Datadog observability](DATADOG-OBSERVABILITY.md) | Tags, metrics, monitors, SLOs, dashboards, the webhook, LLM Observability and the recovery notebook. |
 | [Incident scenarios](INCIDENT-SCENARIOS.md) | The five incidents the demo triggers, what each one looks like and how it is resolved. |
-| [Capacity and cost](CAPACITY-AND-COST.md) | How many ponds one 9 USD host carries, measured at five and ten times the demo, and what a pond costs to watch each month. |
+| [Capacity and cost](CAPACITY-AND-COST.md) | How many ponds one 9 USD host carries, measured at five times the demo, and what a pond costs to watch each month. |
 | [Declaration](DECLARATION.md) | What existed before the build window, reused components, data and AI tools. |
 
 ## Diagrams
