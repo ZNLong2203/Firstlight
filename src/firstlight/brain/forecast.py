@@ -22,7 +22,8 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
     instead of mixing two regimes for the next twelve minutes. Quality that drifts down as biofilm
     grows is not a jump, so the rate of change stays measurable while a probe fouls.
 
-    Two window stages number the regimes ($shift, then a running $sum). The regression itself is a
+    Each reading is cut down to the five fields the fit reads before anything sorts it. Two window stages
+    number the regimes ($shift, then a running $sum). The regression itself is a
     $group of running sums per pond and regime: a third window stage would sort every reading again,
     and measured on 200 ponds it cost as much as the rest of the pipeline together.
     """
@@ -67,7 +68,18 @@ def forecast_pipeline(since: datetime) -> list[dict[str, Any]]:
     }
     return [
         {"$match": {"ts": {"$gte": since}}},
-        {"$set": {"turning": turning, "q": {"$ifNull": ["$probe.q", 1.0]}}},
+        # Only what the fit reads goes on: both window stages sort every reading, a whole reading is about
+        # four times larger, and a stage that outgrows 100 MB of memory sorts on disk.
+        {
+            "$project": {
+                "_id": 0,
+                "ts": 1,
+                "meta.pond": 1,
+                "do": 1,
+                "turning": turning,
+                "q": {"$ifNull": ["$probe.q", 1.0]},
+            }
+        },
         {
             "$setWindowFields": {
                 **by_pond,
