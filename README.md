@@ -9,6 +9,8 @@ The build window runs from 17 to 31 October 2026; the application code lands in 
 
 **Live demo:** <https://167-104-100-185.sslip.io>. 200 simulated ponds on 50 farms run around the clock on Vietnam time. The console is read-only; the chaos panel, which injects real faults, asks for a demo code.
 
+![The console at night: 200 ponds on 50 farms, coloured by dissolved oxygen](docs/images/console-ponds.png)
+
 ## What it does
 
 - **Forecasts every pond every 10 s.** One MongoDB aggregation fits the oxygen trend of all 200 ponds in 345 ms. It restarts the fit when an aerator stops or a probe is cleaned, and gives the minutes left before the pond drops below 3 mg/L.
@@ -16,6 +18,8 @@ The build window runs from 17 to 31 October 2026; the application code lands in 
 - **Acts within seconds and proves recovery.** Playbooks send commands through a change-stream command bus, and the gateway acknowledges each one. On the demo, an aerator failure was detected in 5 s and the standby was turning 1 s later. The pond never dropped below 4.55 mg/L and the incident was resolved in 2.2 minutes, with lead time, MTTR and oxygen debt computed in MongoDB. Each closed incident writes its proof, graphs included, to a Datadog notebook.
 - **Keeps the farmer in the loop.** One plain Vietnamese message on Telegram, with an acknowledge button and a reminder if nobody answers within 3 minutes. A dawn report at 06:00 shows what the night held and the value of the shrimp it protected.
 - **Uses AI where it is safe.** Gemini investigates with read-only tools, after the rules have decided. It recalls similar past incidents through hybrid vector and keyword search, and every answer is scored: on the demo it matched the injected fault 10 times out of 10, and every answer named only real ponds and devices.
+
+![An incident in the console: the release that stopped ingest, its proof, and the AI's second opinion](docs/images/console-incident.png)
 
 ![One incident, end to end](docs/images/incident-timeline.png)
 
