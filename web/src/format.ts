@@ -93,6 +93,17 @@ export function clockTime(iso: string | undefined, offsetHours: number, seconds 
   return seconds ? `${base}:${String(date.getUTCSeconds()).padStart(2, "0")}` : base;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A time on the farm clock, with its day when that day is not today. */
+export function clockDay(iso: string | undefined, offsetHours: number): string {
+  if (!iso) return "--:--";
+  const date = farmClock(Date.parse(iso), offsetHours);
+  const today = farmClock(Date.now(), offsetHours);
+  if (date.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) return hhmm(date);
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${hhmm(date)}`;
+}
+
 export const CAUSE_LABEL: Record<string, string> = {
   aerator_failure: "Aerator failure",
   power_outage: "Power cut",

@@ -1,4 +1,4 @@
-import { CAUSE_LABEL, clockTime, describe, headline, perHour, seconds, target, vnd } from "../format";
+import { CAUSE_LABEL, clockDay, clockTime, describe, headline, perHour, seconds, target, vnd } from "../format";
 import { INCIDENT_LABEL, INCIDENT_ORDER, INCIDENT_TONE } from "../status";
 import type { AiStats, Incident, PondState } from "../types";
 import { Track } from "./Track";
@@ -75,7 +75,7 @@ export function IncidentsView({ ponds, incidents, offsetHours, aiStats, selected
                       onKeyDown={(event) => event.key === "Enter" && pick()}
                       className="cursor-pointer transition-colors hover:bg-ink-900/80 focus-visible:bg-ink-900"
                     >
-                      <td className="py-3 pr-4 font-mono text-[12px] text-faint">{clockTime(incident.closed_at, offsetHours)}</td>
+                      <td className="py-3 pr-4 font-mono text-[12px] text-faint">{clockDay(incident.closed_at, offsetHours)}</td>
                       <td className="py-3 pr-4 text-paper">{CAUSE_LABEL[incident.diagnosis?.cause ?? "unknown"]}</td>
                       <td className="py-3 pr-4 font-mono text-[12.5px] text-paper-2">{where(incident)}</td>
                       <td className="py-3 pr-4 text-right font-mono text-paper-2">{seconds(m?.mttd_s)}</td>
