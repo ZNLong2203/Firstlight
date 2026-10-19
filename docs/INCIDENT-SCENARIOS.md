@@ -56,7 +56,9 @@ An earlier run, before the 3-minute rate signal existed, needed 90 s and only ca
 
 ## 3. A deploy that drops data
 
-`scripts/release.sh 1.4 --regression` starts `firstlight-api` 1.4, and only the API container is recreated. The release adds a duplicate check on the rule "a gateway never sends the same sequence number twice": before storing a batch, it looks in `ingest_batches` for one with the same `{gateway, seq}`. The rule is wrong. A gateway's sequence number starts again at 1 when it reboots, which is why every boot has its own id and the batch id carries it. `ingest_batches` keeps a day of batches, so once a gateway has rebooted that day, nearly every new batch matches an old one. 1.4 answers it as a duplicate with a 200, and the gateway, told the batch is safe, drops it. The data does not slow down: it stops, and what the gateways send meanwhile is lost.
+`scripts/release.sh 1.4 --regression` starts `firstlight-api` 1.4, and only the API container is recreated. The release adds a duplicate check on the rule "a gateway never sends the same sequence number twice": before storing a batch, it looks in `ingest_batches` for one with the same `{gateway, seq}`. The rule is wrong. A gateway's sequence number starts again at 1 when it reboots, which is why every boot has its own id and the batch id carries it. After a reboot, a gateway's new batches carry numbers its previous boot already sent, and `ingest_batches` keeps a day of batches, so they match. 1.4 answers each as a duplicate with a 200, and the gateway, told the batch is safe, drops it. The data does not slow down: it stops, and what the gateways send meanwhile is lost.
+
+So that a run does not depend on when the gateways last rebooted, `--regression` first reboots the simulated gateways, as a power blip at the farms would, and waits 30 s for them to report before 1.4 starts.
 
 The check is slow as well. No index covers `{gateway, seq}`, and the lookup landed inside the loop over the batch's readings, an N+1 query. Where nothing matches, as on a fleet that has not rebooted that day, each lookup scans the collection: 258 ms over 429,000 batches.
 
