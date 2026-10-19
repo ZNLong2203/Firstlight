@@ -24,7 +24,7 @@ The two data path scenarios cannot be detected faster than their threshold: a po
 
 ![One incident, end to end](images/incident-timeline.png)
 
-The figure shows the full design, including the Datadog monitor that joins once the trial is active. Measured run, incident INC-0001, pond BL-01-A3:
+The figure shows the full design, Datadog's monitor included. This run was measured before Datadog was connected, so the brain worked alone. Measured run, incident INC-0001, pond BL-01-A3:
 
 | Farm time | What happened | Where it shows |
 |---|---|---|
@@ -122,7 +122,7 @@ Measured run, incident INC-0004, farm KG-01:
 
 ## Ground truth and evaluation
 
-The chaos registry (`chaos`) records every injected fault with its pond, device and start time. The brain never reads it while it investigates. In every measured run above, the diagnosis matched the injected fault. When the AI investigator lands, each resolved incident will be compared with the registry and scored as `rca_correct` in Datadog LLM Observability, and the demo will report the accuracy across all runs, not a single example.
+The chaos registry (`chaos`) records every injected fault with its pond, device and start time. The brain never reads it while it investigates. In every measured run above, the diagnosis matched the injected fault. The AI investigator never reads it either. Once an incident closes, both diagnoses are compared with the registry: the investigator's is scored as `rca_correct` in Datadog LLM Observability, and the console reports the accuracy across all runs rather than a single example. On 19 October 2026 that was 10 of 10 for the investigator and 10 of 10 for the rules.
 
 ## Outside demo mode
 

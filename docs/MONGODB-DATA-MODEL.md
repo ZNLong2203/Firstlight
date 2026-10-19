@@ -1,6 +1,6 @@
 # MongoDB data model
 
-> **Status:** the collections and pipelines below match the running code. They are written for MongoDB 8.0 and run on `mongodb-atlas-local:8.0.34` on the demo host, which includes Atlas Search and Vector Search; the same code runs on Atlas. Toto forecasts and incident search are marked as planned. Measured figures (ingest rate, compression, `explain()` output) are added in the last section.
+> **Status:** the collections and pipelines below match the running code. They are written for MongoDB 8.0 and run on `mongodb-atlas-local:8.0.34` on the demo host, which includes Atlas Search and Vector Search; the same code runs on Atlas. Measured figures (ingest rate, compression, `explain()` output) are in the last section.
 
 ![Data in MongoDB](images/mongodb-data-model.png)
 
@@ -58,7 +58,7 @@ One document per pond per tick carries every measurement for that tick. This pro
 }
 ```
 
-Ingest updates `last` with a pipeline update that only replaces it when the reading is newer, so a gateway's late backlog never rewinds the pond. The brain writes `status` and `forecast` every 10 s. A repair ticket keeps a broken aerator's 0 A from raising a new alarm until it draws current again; Toto's `p10` and `p90` join `forecast` when that work lands.
+Ingest updates `last` with a pipeline update that only replaces it when the reading is newer, so a gateway's late backlog never rewinds the pond. The brain writes `status` and `forecast` every 10 s. A repair ticket keeps a broken aerator's 0 A from raising a new alarm until it draws current again.
 
 ### `commands`: the command bus
 
@@ -113,7 +113,7 @@ db.incidents.createIndex({ opened_at: -1 })
 db.incidents.createIndex({ key: 1 }, { unique: true, partialFilterExpression: { open: true } })
 ```
 
-The ground truth of a demo fault is not stored on the incident: it lives in `chaos`, which the brain never reads while it investigates. Embedding, summaries and postmortems are planned with the AI investigator.
+The ground truth of a demo fault is not stored on the incident: it lives in `chaos`, which the brain never reads while it investigates. Once the AI investigator has run, an incident also carries its findings, its postmortem, and the text and embedding that incident memory searches (see *Have we seen this before?* below).
 
 When an incident resolves, the brain embeds its summary with Gemini (`gemini-embedding-2`, 768 dimensions, returned already normalised) and stores it in `embedding`. The model ignores the `taskType` parameter, so the task goes into the text: documents are embedded as `title: none | text: …` and queries as `task: search result | query: …`. On our own test set of 22 incidents and 18 English and Vietnamese queries, this kept top-1 accuracy at 100% and raised cross-language recall@3 from 0.06 to 0.62. Two search indexes cover the collection:
 
@@ -144,7 +144,7 @@ On Atlas, automated embedding with Voyage AI can replace the Gemini step; the qu
 | `chaos` | the demo's ground truth: `kind`, `pond`, `gateway`, `farm`, `device`, `started_at`, `cleared_at` | `{ status: 1, started_at: -1 }` |
 | `events` | what a gateway did on its own (the failsafe), reported with its next batch | `_id` = batch id + index, so a retry adds nothing; TTL 30 days |
 | `counters` | `_id: "incident"`, `seq` | `$inc` gives the next `INC-0001` id |
-| `reports` | `{ farm, date }`, incidents, minimum DO per pond, SLO (planned) | unique `{ farm: 1, date: 1 }` |
+| `reports` | `{ farm, date }`, incidents, minimum DO per pond, the share of pond-minutes at safe oxygen | unique `{ farm: 1, date: 1 }` |
 
 ## Aggregation pipelines
 

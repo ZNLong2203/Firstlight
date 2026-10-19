@@ -1,6 +1,6 @@
 # Datadog observability
 
-> **Status:** live on a Datadog test org (site ap1) since 18/10/2026. The Agent collects APM traces from the three services, DogStatsD metrics, JSON logs carrying trace ids, and the investigator's LLM Observability spans and evaluations. Monitors, SLOs, dashboards and the webhook are code in `infra/datadog/`, applied with `scripts/datadog-apply.sh`; the notebook in *Proof of recovery* is still the design.
+> **Status:** live on a Datadog test org (site ap1) since 18/10/2026. The Agent collects APM traces from the three services, DogStatsD metrics, JSON logs carrying trace ids, and the investigator's LLM Observability spans and evaluations. Monitors, SLOs, dashboards and the webhook are code in `infra/datadog/`, applied with `scripts/datadog-apply.sh`, and every closed incident writes its notebook (*Proof of recovery*). RUM is built into the console and switches on once a RUM application's id and client token are set.
 
 ![Observability with Datadog](images/datadog-observability.png)
 
@@ -29,7 +29,7 @@ Business tags are set on the active span (`span.set_tag`) and bound to the logge
 | Traces | `ddtrace` auto-instruments FastAPI, PyMongo and httpx. Gateways call the API with httpx, so one trace runs from the gateway, through the API, to MongoDB. The brain's jobs (forecast, evidence, verify) are custom spans. |
 | Logs | JSON to stdout with `dd.trace_id` and `dd.span_id` injected. The Agent tails the containers. |
 | Metrics | DogStatsD (UDP 8125) for pond and gateway metrics; APM trace metrics come for free. |
-| RUM | Browser SDK in the console, with `allowedTracingUrls` so clicks link to backend traces. |
+| RUM | Browser SDK in the console (`web/src/rum.ts`), with `allowedTracingUrls` so clicks link to backend traces. It loads only when `VITE_DD_RUM_APPLICATION_ID` and `VITE_DD_RUM_CLIENT_TOKEN` are set at build time. |
 | LLM Observability | `ddtrace.llmobs`: `workflow`, `agent`, `tool`, `retrieval` and `llm` spans around the Gemini investigator, plus evaluations. |
 | Deployments | `DD_VERSION` is the git sha, so Deployment Tracking draws a marker on every chart when the version changes. |
 | Database Monitoring | The Agent's `mongo` check with `dbm: true`, declared as an Autodiscovery label on the Agent container, so turning it on never restarts the database. It collects:<br>• query samples with their explain plans;<br>• slow operations, from MongoDB's slow-query log;<br>• collection schemas;<br>• query metrics from `$queryStats`. The check signs in as a read-only `datadog` user whose password stays in the server's `.env`. Every MongoDB command carries its trace in a comment (`DD_DBM_PROPAGATION_MODE=full`), so a query in DBM opens its trace in APM, and the collection scan of scenario 3 shows up there with its plan. |
@@ -54,7 +54,7 @@ About 1,200 contexts: 200 ponds × 6 pond gauges, plus counts and distributions 
 | `firstlight.ai.rca` | count | result, truth | brain, in demo mode |
 | `firstlight.ai.latency_ms` | distribution | model, status | brain |
 
-To add with the Datadog setup: per-pond minute counts for the SLOs (`firstlight.pond.safe_minutes`, `.fresh_minutes`, `.total_minutes`), and the gateways' buffer depth and send errors.
+Not sent: a gateway's buffer depth and send errors. A gateway's silence shows in `freshness_seconds`, and the backlog it flushes when it reconnects in `ingest.lag_seconds`.
 
 ## Monitors
 
