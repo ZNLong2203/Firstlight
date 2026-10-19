@@ -18,6 +18,20 @@ Firstlight's demo shows operational incidents from the moment they start to the 
 
 The two data path scenarios cannot be detected faster than their threshold: a pond counts as blind after 60 s without data.
 
+## Detect – Investigate – Resolve
+
+Each scenario in the three steps, with the measured runs described below.
+
+| # | Detect | Investigate | Resolve |
+|---|---|---|---|
+| 1 | The gateway's next batch shows the aerator at 0 A. The incident opens 5 s after the aerator stopped, while the pond still reads 4.6 mg/L. | The aerator drew 9.0 A, then 0 A (+0.85). The probe's quality, fresh readings and steady neighbouring ponds rule out the probe, the data path and a power cut. Aerator failure, 85% sure. Gemini then investigates again with read-only tools. | The standby aerator starts through the command bus, confirmed by the gateway in 1 s. The owner gets one Telegram message with an acknowledge button. Recovery is verified: DO at 4 mg/L or more, and not falling, for 2 minutes. Resolved in 2.2 minutes, and a repair ticket stays open until the aerator turns again. |
+| 2 | DO falls faster than 0.1 mg/L per minute. The incident opens in 27 s, at 4.48 mg/L, before any threshold alarm would fire. | DO falls with every aerator turning, faster than water can lose oxygen (+0.35), while pH, which follows real oxygen, stays flat (+0.25). Probe fault, 60% sure. | Closed as a false alarm: nobody is woken up. A ticket asks for the probe to be cleaned, the pond is not forecast from it meanwhile, and the ticket closes itself once the probe reads normally. |
+| 3 | 50 of 50 gateways stop reporting. One estate incident opens 63 s after the last reading. Datadog's gateway monitor confirms it 56 s later, and its 50 alerts join that incident as one line. | The whole fleet went quiet at once, so the backend is at fault, not the 4G links (+0.70). `firstlight-api` 1.4 took over as the data stopped, replacing 1.3 (+0.35). In Datadog, duplicates jump at 1.4's deployment marker while stored readings fall to 0. | The engineer gets one message proposing a rollback to 1.3. Data is back 17 s after the rollback, and the gap check shows that 26% of the blind spell was recovered: the rest was dropped by 1.4. |
+| 4 | Four ponds go 60 s without data. The incident opens in 64 s. | 49 other gateways report normally, so ingest works and this gateway is the problem. Gateway offline, 80% sure. | The technician gets a message, and the ponds show as blind. The gateway's own failsafe would start a standby aerator if a pond fell below 3.5 mg/L. When the link returns, `$densify` checks the gap: 100% covered by the gateway's backlog. Resolved 12 s after the data returned. |
+| 5 | Every aerator on farm KG-01 stops at once. The incident opens in 10 s. | All aerators of one farm at the same moment point to the power, not to the aerators (+0.90). Power cut, 100% sure. | Starting the generator costs money, so the playbook asks a person first. Once approved in the console, the command goes out and the gateway confirms within a second. Resolved, with a lowest DO of 4.54 mg/L. |
+
+Every closed incident also writes its proof to a Datadog notebook: the numbers, graphs of the minutes around it, and the AI postmortem.
+
 ---
 
 ## 1. Aerator failure

@@ -26,7 +26,7 @@ The build window runs from 17 to 31 October 2026; the application code lands in 
 - [Architecture](docs/ARCHITECTURE.md): components, flows, failure modes, deployment
 - [MongoDB data model](docs/MONGODB-DATA-MODEL.md): collections, lifecycle, aggregation pipelines
 - [Datadog observability](docs/DATADOG-OBSERVABILITY.md): tags, monitors, SLOs, dashboards, webhook
-- [Incident scenarios](docs/INCIDENT-SCENARIOS.md): the five incidents the demo triggers
+- [Incident scenarios](docs/INCIDENT-SCENARIOS.md): the five incidents the demo triggers, each through detect, investigate and resolve, with measured runs
 - [Capacity and cost](docs/CAPACITY-AND-COST.md): load tests at five and ten times the demo, and the cost per pond
 - [Declaration](docs/DECLARATION.md): reused components, data and AI tools
 
