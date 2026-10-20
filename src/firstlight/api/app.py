@@ -52,6 +52,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await record_deployment(app.state.db, settings)
     except Exception:
         logging.getLogger("firstlight.api").exception("schema setup failed; /healthz will report it")
+    if settings.ingest_duplicate_check == "fields":  # scenario 3's broken release, never meant to stay
+        logging.getLogger("firstlight.api").warning(
+            "release 1.4's duplicate check is on: batches from a rebooted gateway are dropped",
+            extra={"ctx": {"version": settings.dd_version}},
+        )
     app.state.hub = Hub()
     app.state.commands = CommandHub()
     app.state.telegram = Telegram(settings)

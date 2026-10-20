@@ -134,9 +134,8 @@ async def ensure_schema(db: AsyncDatabase[dict[str, Any]]) -> None:
     for name in INDEXES:
         if name not in existing and name not in (*TIME_SERIES, "devices"):
             await db.create_collection(name)
-    for name in ("stream_state", "counters"):
-        if name not in existing:
-            await db.create_collection(name)
+    if "counters" not in existing:
+        await db.create_collection("counters")
 
     for name, models in INDEXES.items():
         await db[name].create_indexes(models)
