@@ -169,8 +169,8 @@ async def _investigate(
                 args = dict(call.args or {})
                 with traced_tool(call.name or "?", args) as span:
                     result = await tools.run(db, call.name or "", args)
-                    if span is not None:
-                        LLMObs.annotate(span=span, output_data=result)
+                    if span is not None:  # plain JSON: LLM Observability shows datetimes as a placeholder
+                        LLMObs.annotate(span=span, output_data=json.loads(as_json(result)))
                 calls_made.append({"tool": call.name, "args": args})
                 seen.update(evals.NAMES.findall(as_json(result)))  # names a tool showed are grounded too
                 parts.append(
