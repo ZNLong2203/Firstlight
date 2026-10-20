@@ -89,6 +89,19 @@ def test_a_pond_incident_shows_its_oxygen_and_the_postmortem() -> None:
     )
 
 
+def test_one_pond_is_one_pond_and_follow_ups_are_not_listed_twice() -> None:
+    written = {
+        "status": "done",
+        "title": "Aerator failure in BL-01-A3",
+        "postmortem_md": "### Summary\nThe standby took over.\n\n### Follow-ups\n- Repair AE-1",
+        "follow_ups": ["Repair AE-1"],
+    }
+    incident = aerator_incident(postmortem=written, at_risk={"value_vnd": 600_000_000, "ponds": 1})
+    summary, *_, postmortem = cells(notebook(incident, [], "demo", "ap1.datadoghq.com", None, 7))
+    assert "shrimp in 1 pond |" in summary["text"]
+    assert postmortem["text"].count("Repair AE-1") == 1 and "**Follow-ups**" not in postmortem["text"]
+
+
 def test_a_data_path_incident_shows_what_ingest_stored() -> None:
     incident = aerator_incident(
         scope="estate",

@@ -141,6 +141,8 @@ async def _investigate(
 ) -> dict[str, Any]:
     started = time.perf_counter()
     question = as_json(brief(incident))
+    if LLMObs.enabled:  # set now, so a run cut short still shows what it was asked
+        LLMObs.annotate(input_data=question, tags={"incident": incident["_id"]})
     contents = [types.Content(role="user", parts=[types.Part(text=question)])]
     calls_made: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -191,7 +193,6 @@ async def _investigate(
     }
     if LLMObs.enabled:
         LLMObs.annotate(
-            input_data=question,
             output_data=report,
             metadata={"model": model, "rounds": rounds},
             tags={
@@ -209,6 +210,8 @@ async def _postmortem(gemini: Gemini, incident: dict[str, Any]) -> dict[str, Any
         **brief(incident),
         "investigation": {k: incident.get("investigation", {}).get(k) for k in ("cause", "summary")},
     }
+    if LLMObs.enabled:
+        LLMObs.annotate(input_data=as_json(record), tags={"incident": incident["_id"]})
     config = types.GenerateContentConfig(
         system_instruction=POSTMORTEM_SYSTEM,
         response_mime_type="application/json",
@@ -219,6 +222,8 @@ async def _postmortem(gemini: Gemini, incident: dict[str, Any]) -> dict[str, Any
         [types.Content(role="user", parts=[types.Part(text=as_json(record))])], config
     )
     report = json.loads(response.text or "{}")
+    if LLMObs.enabled:
+        LLMObs.annotate(output_data=report, metadata={"model": model})
     return {
         **report,
         "model": model,
@@ -228,11 +233,13 @@ async def _postmortem(gemini: Gemini, incident: dict[str, Any]) -> dict[str, Any
 
 
 # ddtrace's LLM Observability decorators carry no type hints; the casts keep these signatures typed.
+# Their automatic input is the call's arguments, a database handle and a client among them: each span
+# annotates its own input and output instead.
 investigate = cast(
     Callable[[Gemini, AsyncDatabase[dict[str, Any]], dict[str, Any]], Awaitable[dict[str, Any]]],
-    agent(name="incident_investigator")(_investigate),
+    agent(name="incident_investigator", _automatic_io_annotation=False)(_investigate),
 )
 postmortem = cast(
     Callable[[Gemini, dict[str, Any]], Awaitable[dict[str, Any]]],
-    workflow(name="incident_postmortem")(_postmortem),
+    workflow(name="incident_postmortem", _automatic_io_annotation=False)(_postmortem),
 )

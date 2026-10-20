@@ -57,13 +57,17 @@ def _duration(seconds: float) -> str:
     return f"{seconds:.0f} s" if seconds < 90 else f"{seconds / 60:.1f} min"
 
 
+def _ponds(count: int) -> str:
+    return "1 pond" if count == 1 else f"{count} ponds"
+
+
 def _target(incident: Doc) -> str:
-    count = len(incident.get("ponds", []))
+    count = _ponds(len(incident.get("ponds", [])))
     if incident["scope"] == "pond":
         return f"pond {incident['pond']}"
     if incident["scope"] == "estate":
-        return f"the estate, {count} ponds"
-    return f"{incident['scope']} {incident.get(incident['scope'])}, {count} ponds"
+        return f"the estate, {count}"
+    return f"{incident['scope']} {incident.get(incident['scope'])}, {count}"
 
 
 def _filter(env: str, incident: Doc) -> str:
@@ -211,7 +215,7 @@ def summary(incident: Doc, commands: list[Doc], links: list[tuple[str, str]], of
         rows.append(("Blind spell", f"{_duration(metrics['blind_s'])}{recovered}"))
     if at_risk := incident.get("at_risk"):
         rows.append(
-            ("At stake", f"{at_risk['value_vnd'] / 1e9:.1f} bn VND of shrimp in {at_risk['ponds']} ponds")
+            ("At stake", f"{at_risk['value_vnd'] / 1e9:.1f} bn VND of shrimp in {_ponds(at_risk['ponds'])}")
         )
 
     acks = {c["_id"]: c for c in commands}
@@ -272,13 +276,15 @@ def notebook(
     cells = [_markdown(summary(incident, commands, links, offset_hours)), *graphs(incident, env)]
     written = incident.get("postmortem") or {}
     if written.get("status") == "done":
-        follow_ups = "".join(f"\n- {item}" for item in written.get("follow_ups", []))
+        body = written.get("postmortem_md", "")
+        # The postmortem is asked for a Follow-ups section of its own; the list is added only without one.
+        listed = "follow-ups" in body.lower()
+        follow_ups = "" if listed else "".join(f"\n- {item}" for item in written.get("follow_ups", []))
         cells.append(
             _markdown(
                 f"## {written.get('title', 'Postmortem')}\n\n_Written by the AI investigator "
                 f"({written.get('model', 'Gemini')}) from the incident's own data._\n\n"
-                f"{written.get('postmortem_md', '')}"
-                + (f"\n\n**Follow-ups**{follow_ups}" if follow_ups else "")
+                f"{body}" + (f"\n\n**Follow-ups**{follow_ups}" if follow_ups else "")
             )
         )
     return {
