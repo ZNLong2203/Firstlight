@@ -68,11 +68,11 @@ async def forecast_once(db: AsyncDatabase[dict[str, Any]], metrics: Metrics, now
             )
         )
         tags = [f"farm:{state.get('farm')}", f"pond:{state['_id']}", f"gateway:{state.get('gateway')}"]
-        metrics.gauge(
-            "firstlight.pond.minutes_to_hypoxia",
-            NO_RISK_MINUTES if minutes is None else min(minutes, NO_RISK_MINUTES),
-            tags,
+        # A probe waiting to be cleaned is not believed: its pond is not forecast, so no monitor pages for it.
+        published = (
+            NO_RISK_MINUTES if minutes is None or "sensor_ticket" in state else min(minutes, NO_RISK_MINUTES)
         )
+        metrics.gauge("firstlight.pond.minutes_to_hypoxia", published, tags)
         if last:
             metrics.gauge("firstlight.pond.freshness_seconds", freshness, tags)
     if updates:
