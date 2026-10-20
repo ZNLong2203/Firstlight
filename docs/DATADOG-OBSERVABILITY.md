@@ -148,10 +148,10 @@ Before the agent starts, the three most similar closed incidents are found by hy
 | `farmer_message_ok` | categorical | Vietnamese, at most 320 characters, names the pond or farm, no internal jargon | the message a farmer reads at 2 a.m. stays short and plain |
 | `rca_correct` | categorical, demo mode | the agent's cause compared with the fault injected from the chaos panel, or with the release that carried the regression | accuracy against ground truth; the rules are scored the same way, side by side |
 
-On the demo, 12 incidents had been investigated by 20/10/2026:
-- the agent and the rules each matched the injected fault 11 times out of 11;
+On the demo, 15 incidents had been investigated by 20/10/2026:
+- the agent and the rules each matched the injected fault 14 times out of 14;
 - every answer was grounded;
-- all 12 farmer messages passed.
+- all 15 farmer messages passed.
 
 The console's AI panel shows these numbers from `GET /v1/incidents/ai/stats`.
 

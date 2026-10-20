@@ -93,10 +93,10 @@ Every answer is scored automatically:
 - is the farmer's message plain Vietnamese without jargon?
 - in demo mode, does it match the fault that was actually injected?
 
-On the demo, 12 incidents had been investigated by 20/10/2026:
-- The AI matched the injected fault 11 times out of 11, and so did the rules.
+On the demo, 15 incidents had been investigated by 20/10/2026:
+- The AI matched the injected fault 14 times out of 14, and so did the rules.
 - Every answer was grounded.
-- All 12 farmer messages passed.
+- All 15 farmer messages passed.
 - The one incident the rules could not explain was marked "explained unknown" rather than scored.
 
 ### D. Response: a closed loop through MongoDB
