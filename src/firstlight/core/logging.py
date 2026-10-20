@@ -1,5 +1,6 @@
 """JSON logs on stdout, carrying the Datadog trace and span ids that ddtrace injects."""
 
+import asyncio
 import json
 import logging
 import sys
@@ -30,6 +31,20 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, default=str)
 
 
+class ShutdownCancellations(logging.Filter):
+    """On a restart uvicorn cancels the connections that never end on their own, the consoles' live
+    streams and the gateways' command channels, and logs each as an error. They are closed on
+    purpose, and every client reconnects, so they are logged as information instead."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        cancelled = bool(record.exc_info) and isinstance(record.exc_info[1], asyncio.CancelledError)  # type: ignore[index]
+        if cancelled:
+            record.msg, record.args, record.exc_info = "connection closed by shutdown", (), None
+        if cancelled or "graceful shutdown exceeded" in record.getMessage():
+            record.levelno, record.levelname = logging.INFO, "INFO"
+        return True
+
+
 def configure_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
@@ -39,3 +54,4 @@ def configure_logging(level: str = "INFO") -> None:
     # One line per HTTP request would be 50 gateways x 6 per minute: requests are traced, not logged.
     for noisy in ("uvicorn.access", "httpx"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").addFilter(ShutdownCancellations())
