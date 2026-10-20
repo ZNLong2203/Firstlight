@@ -71,6 +71,23 @@ async def test_a_monitor_alerting_on_every_pond_is_one_line(api: tuple[httpx.Asy
     ], "one line per run of the same transition, not one per pond"
 
 
+async def test_an_alert_that_arrives_after_the_close_joins_the_closed_incident(
+    api: tuple[httpx.AsyncClient, Any],
+) -> None:
+    harness = Harness(*api)
+    await harness.start()
+    pond = harness.world.ponds["BL-01-A3"]
+    harness.world.apply(FaultRequest(id="CH-H2", kind="aerator_trip", pond=pond.id), harness.now)
+    resolved = await harness.until(pond.id, "resolved", limit=40)
+    await harness.client.post("/v1/hooks/datadog", json=alert("Triggered", pond.id, "late-1"), headers=SIGNED)
+    await harness.tick()
+    assert await harness.db.incidents.count_documents({}) == 1, (
+        "Datadog saw it late; it is not a new incident"
+    )
+    closed = await harness.db.incidents.find_one({"_id": resolved["_id"]})
+    assert closed["timeline"][-1]["kind"] == "datadog" and closed["status"] == "resolved"
+
+
 async def test_an_alert_the_rules_cannot_explain_waits_for_a_person(
     api: tuple[httpx.AsyncClient, Any],
 ) -> None:

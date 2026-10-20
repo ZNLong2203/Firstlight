@@ -771,6 +771,9 @@ async def close_repair_tickets(db: Db, states: list[Doc], now: datetime) -> None
 
 
 TRIGGERS = {"triggered", "re-triggered", "warn", "no data"}
+# A monitor judges up to the last 2 minutes and alerts a minute or two after that, so its alerts can
+# arrive after the brain has closed the incident they describe.
+LATE_ALERTS = timedelta(minutes=10)
 
 
 def _alert_problem(alert: Doc, states: list[Doc], by_id: dict[str, Doc]) -> Problem | None:
@@ -824,8 +827,9 @@ async def note_alert(db: Db, incident: Doc, alert: Doc) -> None:
 async def process_alerts(
     db: Db, states: list[Doc], by_id: dict[str, Doc], open_incidents: list[Doc], now: datetime
 ) -> None:
-    """Each new Datadog alert lands on the open incident for its pond, gateway or farm. A trigger with no
-    incident opens one, which the brain then investigates like its own."""
+    """Each new Datadog alert lands on the open incident for its pond, gateway or farm, or on the incident
+    that closed for it in the last 10 minutes. Any other trigger opens an incident, which the brain then
+    investigates like its own."""
     async for alert in db.alerts.find({"status": "new"}).sort("received_at", 1).limit(100):
         problem = _alert_problem(alert, states, by_id)
         incident = None
@@ -841,6 +845,22 @@ async def process_alerts(
         if incident:
             await note_alert(db, incident, alert)
             update: Doc = {"status": "linked", "incident": incident["_id"]}
+        elif (
+            problem
+            and alert["transition"] in TRIGGERS
+            and (
+                closed := await db.incidents.find_one(
+                    {
+                        "open": {"$exists": False},
+                        "closed_at": {"$gte": now - LATE_ALERTS},
+                        "ponds": {"$all": problem.ponds},
+                    },
+                    sort=[("closed_at", -1)],
+                )
+            )
+        ):
+            await note_alert(db, closed, alert)  # what that incident covered, seen late: no second incident
+            update = {"status": "linked", "incident": closed["_id"]}
         elif problem and alert["transition"] in TRIGGERS:
             opened = await open_incident(db, problem, by_id, now, source="datadog")
             if opened:
