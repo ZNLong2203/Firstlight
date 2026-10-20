@@ -66,7 +66,11 @@ def notify(
             )
             return f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}, {when}.{back}"
         return f"Firstlight không nhận được dữ liệu từ {count} ao từ {at}. Kiểm tra bản deploy gần nhất."
-    return f"Ao {pond}: oxy {mg(do_now)} mg/L, chưa rõ nguyên nhân. Cần kiểm tra ao."
+    if pond:
+        return f"Ao {pond}: oxy {mg(do_now)} mg/L, chưa rõ nguyên nhân. Cần kiểm tra ao."
+    count = len(incident.get("ponds", []))
+    where = f"Trại {farm}" if farm else f"{count} ao" if count else "Firstlight"
+    return f"{where}: có dấu hiệu bất thường từ {at}, chưa rõ nguyên nhân. Cần kiểm tra."
 
 
 def ticket(target: str, device: str | None) -> str:

@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from firstlight.api.app import app
+from firstlight.brain.messages import notify
 from firstlight.brain.notifier import Notifier
 from firstlight.core import config
 from firstlight.core.config import Settings
@@ -99,3 +100,14 @@ async def test_the_button_records_who_acknowledged(
 
     await client.post("/v1/hooks/telegram", json=press, headers=headers)
     assert sent[-1]["text"] == "Sự cố này đã có người nhận rồi.", "a second press changes nothing"
+
+
+def test_an_unexplained_incident_without_a_pond_names_its_farm_or_its_ponds() -> None:
+    opened = datetime(2026, 10, 20, 15, 13, tzinfo=UTC)
+    farm = notify("farmer", {"farm": "BL-01", "ponds": ["BL-01-A1"], "opened_at": opened}, {}, 7)
+    estate = notify("farmer", {"ponds": ["BL-01-A1", "ST-03-A1"], "opened_at": opened}, {}, 7)
+    pond = notify("farmer", {"pond": "BL-01-A1", "opened_at": opened}, {}, 7, do_now=3.42)
+    assert farm.startswith("Trại BL-01: ") and "22:13" in farm
+    assert estate.startswith("2 ao: ")
+    assert pond.startswith("Ao BL-01-A1: oxy 3,4 mg/L")
+    assert "None" not in farm + estate + pond
