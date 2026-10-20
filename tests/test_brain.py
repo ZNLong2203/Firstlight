@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -5,7 +6,7 @@ import httpx
 import pytest
 
 from firstlight.brain.forecast import classify, forecast_pipeline
-from firstlight.brain.main import forecast_once
+from firstlight.brain.main import forecast_once, step
 from firstlight.brain.rollup import roll_up_minutes
 from firstlight.core.config import get_settings
 from firstlight.core.metrics import Metrics
@@ -205,3 +206,12 @@ async def test_a_fouling_probe_keeps_one_regime(api: tuple[httpx.AsyncClient, An
     await db.readings.insert_many(docs)
     result = await (await db.readings.aggregate(forecast_pipeline(NOW - timedelta(minutes=12)))).to_list()
     assert result[0]["points"] == 30 and result[0]["rate_3m"] == pytest.approx(-0.3, rel=0.05)
+
+
+async def test_a_failing_step_does_not_stop_the_rest_of_the_cycle(caplog: pytest.LogCaptureFixture) -> None:
+    async def bad_document() -> None:
+        raise KeyError("ts")
+
+    assert await step("forecast", bad_document()) is None
+    assert "brain step failed" in caplog.text
+    assert await step("notifier", asyncio.sleep(0, result="sent")) == "sent", "the next step still runs"

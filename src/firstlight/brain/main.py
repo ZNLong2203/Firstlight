@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -94,6 +95,26 @@ async def rollups_due(db: AsyncDatabase[dict[str, Any]], now: datetime, done: di
         done["hour"] = previous_hour
 
 
+async def step(name: str, work: Awaitable[Any]) -> Any:
+    """One part of the cycle. A failure is logged and the cycle goes on, so a bad document in one part
+    never stops the others: the forecast, the incidents, the messages, the AI, the notebooks."""
+    try:
+        return await work
+    except Exception:
+        log.exception("brain step failed", extra={"ctx": {"step": name}})
+        return None
+
+
+async def dawn_report(
+    db: AsyncDatabase[dict[str, Any]], telegram: Telegram, offset_hours: float, now: datetime
+) -> None:
+    reports = await dawn_report_due(db, now, offset_hours)
+    if reports:
+        log.info("dawn report written", extra={"ctx": {"date": reports[0]["date"], **reports[0]["summary"]}})
+        if telegram.enabled:
+            await telegram.send(telegram.chat, reports[0]["message_vi"])
+
+
 async def run() -> None:
     settings = get_settings()
     client = make_client(settings)
@@ -122,20 +143,15 @@ async def run() -> None:
             now = datetime.now(UTC)
             try:
                 with tracer.trace("brain.cycle", service="firstlight-brain", resource="cycle"):
-                    counts = await forecast_once(db, metrics, now)
-                    open_incidents = await incident_cycle(db, metrics, policy, now)
-                    await rollups_due(db, now, done)
-                await notifier.cycle(now)
-                reports = await dawn_report_due(db, now, settings.sim_farm_clock_offset_hours)
-                if reports:
-                    log.info(
-                        "dawn report written",
-                        extra={"ctx": {"date": reports[0]["date"], **reports[0]["summary"]}},
-                    )
-                    if telegram.enabled:
-                        await telegram.send(telegram.chat, reports[0]["message_vi"])
-                await ai.cycle(now)
-                await notebooks.cycle(now)
+                    counts = await step("forecast", forecast_once(db, metrics, now))
+                    open_incidents = await step("incidents", incident_cycle(db, metrics, policy, now))
+                    await step("rollups", rollups_due(db, now, done))
+                await step("notifier", notifier.cycle(now))
+                await step(
+                    "dawn report", dawn_report(db, telegram, settings.sim_farm_clock_offset_hours, now)
+                )
+                await step("ai", ai.cycle(now))
+                await step("notebooks", notebooks.cycle(now))
                 elapsed = round(loop.time() - started, 2)
                 metrics.distribution("firstlight.brain.cycle_s", elapsed)
                 ctx = {"ponds": counts, "open_incidents": open_incidents, "cycle_s": elapsed}
