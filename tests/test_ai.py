@@ -170,3 +170,39 @@ class ScriptedPostmortem:
             "follow_ups": [],
         }
         return reply(types.Part(text=json.dumps(written))), "scripted"
+
+
+async def test_the_truth_is_the_fault_still_in_place_or_the_release_after_it(
+    api: tuple[httpx.AsyncClient, Any],
+) -> None:
+    _, db = api
+    now = datetime.now(UTC)
+    estate = {"_id": "INC-0070", "scope": "estate", "ponds": ["ST-03-A1", "BL-03-A3"], "opened_at": now}
+    await db.chaos.insert_one(
+        {
+            "_id": "CH-old",
+            "kind": "probe_fouling",
+            "pond": "ST-03-A1",
+            "started_at": now - timedelta(minutes=7),
+            "cleared_at": now - timedelta(minutes=3),
+        }
+    )
+    await db.deployments.insert_one(
+        {
+            "service": "firstlight-api",
+            "version": "1.4",
+            "started_at": now - timedelta(minutes=1),
+            "config": {"ingest_duplicate_check": "fields"},
+        }
+    )
+    assert await evals.ground_truth(db, estate) == "ingest_regression", "a probe cleaned before is history"
+
+    await db.chaos.insert_one(
+        {
+            "_id": "CH-now",
+            "kind": "aerator_trip",
+            "pond": "BL-03-A3",
+            "started_at": now - timedelta(seconds=20),
+        }
+    )
+    assert await evals.ground_truth(db, estate) == "aerator_failure", "the fault in place, closer to it, wins"

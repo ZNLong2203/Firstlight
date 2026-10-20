@@ -73,10 +73,22 @@ async def ground_truth(db: AsyncDatabase[dict[str, Any]], incident: dict[str, An
         targets.append({"gateway": incident["gateway"], "kind": "gateway_offline"})
     if incident.get("farm"):
         targets.append({"farm": incident["farm"], "kind": "power_outage"})
-    fault = await db.chaos.find_one({"started_at": window, "$or": targets}, sort=[("started_at", -1)])
-    if fault:
-        return FAULT_CAUSE.get(fault["kind"])
+    # A fault counts only if it was still in place when the incident opened: one cleared before is history.
+    in_place = {
+        "$or": [{"cleared_at": {"$exists": False}}, {"cleared_at": None}, {"cleared_at": {"$gte": opened}}]
+    }
+    fault = await db.chaos.find_one(
+        {"started_at": window, "$and": [{"$or": targets}, in_place]}, sort=[("started_at", -1)]
+    )
     regression = await db.deployments.find_one(
         {"config.ingest_duplicate_check": "fields", "started_at": window}, sort=[("started_at", -1)]
     )
+    if fault and regression:  # both around it: the one that started closer to the incident caused it
+        return (
+            "ingest_regression"
+            if regression["started_at"] > fault["started_at"]
+            else FAULT_CAUSE.get(fault["kind"])
+        )
+    if fault:
+        return FAULT_CAUSE.get(fault["kind"])
     return "ingest_regression" if regression else None
