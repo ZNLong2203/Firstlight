@@ -36,6 +36,7 @@ Everything that implements the solution was written from 17 October onward, and 
 | Material Symbols | Apache-2.0 | icons in the documentation diagrams |
 | Simple Icons | CC0-1.0 | brand logos in diagrams (the marks belong to their owners) |
 | Inter, JetBrains Mono | SIL OFL 1.1 | fonts in diagrams |
+| Be Vietnam Pro, Fraunces, JetBrains Mono | SIL OFL 1.1 | fonts in the console, loaded from Google Fonts |
 
 Components added later are listed here when they are added.
 

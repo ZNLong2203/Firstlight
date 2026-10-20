@@ -4,8 +4,8 @@
 
 Oxygen in a shrimp pond bottoms out just before dawn. Firstlight runs the night shift: it forecasts how many minutes each pond has before it runs short of oxygen, tells a pond in trouble from a fouled sensor or a dropped gateway, acts within seconds, and proves the pond recovered. Built on MongoDB and Datadog.
 
-Built for [MUGVN Hackathon 2026: Real-time Operations](https://mini-hackathon-sep-2026.mugvn.com/).
-The build window runs from 17 to 31 October 2026; the application code lands in this repository during that window.
+Built by team Night Shift for [MUGVN Hackathon 2026: Real-time Operations](https://mini-hackathon-sep-2026.mugvn.com/).
+The code in this repository was written in the build window, 17 to 31 October 2026; what was prepared before it is listed in the [declaration](docs/DECLARATION.md).
 
 **Live demo:** <https://167-104-100-185.sslip.io>. 200 simulated ponds on 50 farms run around the clock on Vietnam time. The console is read-only; the chaos panel, which injects real faults, asks for a demo code.
 
@@ -17,7 +17,7 @@ The build window runs from 17 to 31 October 2026; the application code lands in 
 - **Tells the pond from the probe and the data path.** Weighted evidence from aerator current, pH, probe quality, physics, neighbouring ponds, gateway freshness and recent releases gives a cause and a confidence. A fouled probe is a false alarm stopped, not a farmer woken at 2 a.m.
 - **Acts within seconds and proves recovery.** Playbooks send commands through a change-stream command bus, and the gateway acknowledges each one. On the demo, an aerator failure was detected in 5 s and the standby was turning 1 s later. The pond never dropped below 4.55 mg/L and the incident was resolved in 2.2 minutes, with lead time, MTTR and oxygen debt computed in MongoDB. Each closed incident writes its proof, graphs included, to a Datadog notebook.
 - **Keeps the farmer in the loop.** One plain Vietnamese message on Telegram, with an acknowledge button and a reminder if nobody answers within 3 minutes. A dawn report at 06:00 shows what the night held and the value of the shrimp it protected.
-- **Uses AI where it is safe.** Gemini investigates with read-only tools, after the rules have decided. It recalls similar past incidents through hybrid vector and keyword search, and every answer is scored: on the demo it matched the injected fault 10 times out of 10, and every answer named only real ponds and devices.
+- **Uses AI where it is safe.** Gemini investigates with read-only tools, after the rules have decided. It recalls similar past incidents through hybrid vector and keyword search, and every answer is scored: on the demo it matched the injected fault 11 times out of 11, and every answer named only real ponds and devices.
 
 ![An incident in the console: the release that stopped ingest, its proof, and the AI's second opinion](docs/images/console-incident.png)
 
@@ -43,6 +43,8 @@ make up          # first run creates .env from .env.example; COMPOSE_PROFILES pi
 make test        # unit tests (set MONGODB_URI to also run the MongoDB integration tests)
 make lint        # ruff, mypy and the web typecheck
 ```
+
+Nothing else is needed to run it end to end: the simulator, ingest, forecasts, incidents and the console work without any key. `GEMINI_API_KEY` adds the AI investigator, `DD_API_KEY` and `DD_APP_KEY` with the `datadog` profile add telemetry and the incident notebooks, the `TELEGRAM_*` settings add messages to the farmer, and `VITE_DD_RUM_*` switch on RUM in the console.
 
 | Profile | Starts |
 |---|---|

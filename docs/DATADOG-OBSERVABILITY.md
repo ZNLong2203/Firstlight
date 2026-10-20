@@ -48,7 +48,7 @@ About 1,200 contexts: 200 ponds × 6 pond gauges, plus counts and distributions 
 | `firstlight.command.ack_latency_ms` | distribution | action, gateway, status | api |
 | `firstlight.incident.opened`, `.resolved` | count | cause, scope | brain |
 | `firstlight.incident.mttd_s`, `.mttr_min` | distribution | cause, scope | brain |
-| `firstlight.false_alarm.prevented` | count | cause | brain |
+| `firstlight.false_alarm.prevented` | count | cause, scope | brain |
 | `firstlight.brain.cycle_s` | distribution | | brain: a cycle over 10 s also logs a warning |
 | `firstlight.ai.investigations` | count | model, status | brain |
 | `firstlight.ai.rca` | count | result, truth | brain, in demo mode |
@@ -71,7 +71,7 @@ Defined in `infra/datadog/monitors.json`. Three of them call the webhook. Each o
 | The brain's cycle runs past 10 s | `max(last_5m):max:firstlight.brain.cycle_s{env:demo} > 10` | no |
 | The AI investigator got a cause wrong | `sum(last_1h):sum:firstlight.ai.rca{result:incorrect}.as_count() > 0` | no |
 
-Every monitor sets `require_full_window: false` and `notify_no_data: false`. A new pond is not judged for its first two minutes (`new_group_delay`), and a monitor that calls the webhook renotifies every 10 minutes. The anomaly monitor needs history, and the simulator runs around the clock to give it some.
+Every query monitor sets `require_full_window: false` and `notify_no_data: false`. A new pond is not judged for its first two minutes on the three per-pond and per-gateway monitors (`new_group_delay`), and a monitor that calls the webhook renotifies every 10 minutes. The anomaly monitor needs history, and the simulator runs around the clock to give it some.
 
 ## SLOs
 
@@ -148,14 +148,14 @@ Before the agent starts, the three most similar closed incidents are found by hy
 | `farmer_message_ok` | categorical | Vietnamese, at most 320 characters, names the pond or farm, no internal jargon | the message a farmer reads at 2 a.m. stays short and plain |
 | `rca_correct` | categorical, demo mode | the agent's cause compared with the fault injected from the chaos panel, or with the release that carried the regression | accuracy against ground truth; the rules are scored the same way, side by side |
 
-On the demo, 9 incidents had been investigated by 17/10/2026:
-- the agent and the rules each matched the injected fault 8 times out of 8;
+On the demo, 12 incidents had been investigated by 20/10/2026:
+- the agent and the rules each matched the injected fault 11 times out of 11;
 - every answer was grounded;
-- all 9 farmer messages passed.
+- all 12 farmer messages passed.
 
 The console's AI panel shows these numbers from `GET /v1/incidents/ai/stats`.
 
-**Dashboard and monitors.** The AI Investigator dashboard shows latency, tokens and cost per investigation, the fallback-model rate and the four evaluations over time. A monitor alerts the operator, never the farmer, when `rca_correct` falls below 0.8 over the last 20 investigations or when the investigator error rate rises.
+**Dashboard and monitor.** The AI investigator dashboard shows the investigations finished, the share right by the injected fault, investigation time, results scored against the injected fault over time, Gemini tokens and call time by model, and the estimated Gemini cost. The monitor "The AI investigator got a cause wrong" alerts the operator, never the farmer, as soon as one answer is scored incorrect in the last hour.
 
 **Checked on the trial account before relying on them:** managed evaluations, LLM Observability Experiments, and the agent graph views. The design above works without any of them.
 

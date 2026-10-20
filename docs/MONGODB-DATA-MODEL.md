@@ -26,7 +26,8 @@ db.createCollection("readings", {
   timeseries: { timeField: "ts", metaField: "meta", granularity: "seconds" },
   expireAfterSeconds: 14 * 24 * 3600
 })
-db.readings.createIndex({ "meta.pond": 1, ts: -1 })
+db.readings.createIndex({ "meta.pond": 1, ts: -1 })     // pond_ts: a pond's readings
+db.readings.createIndex({ "meta.gateway": 1, ts: -1 })  // gateway_ts: a gateway's readings
 ```
 
 One document per pond per tick carries every measurement for that tick. This produces fewer buckets and better compression than one document per sensor. The `meta` fields are stable identifiers only.
@@ -115,7 +116,7 @@ db.incidents.createIndex({ key: 1 }, { unique: true, partialFilterExpression: { 
 
 The ground truth of a demo fault is not stored on the incident: it lives in `chaos`, which the brain never reads while it investigates. Once the AI investigator has run, an incident also carries its findings, its postmortem, and the text and embedding that incident memory searches (see *Have we seen this before?* below).
 
-When an incident resolves, the brain embeds its summary with Gemini (`gemini-embedding-2`, 768 dimensions, returned already normalised) and stores it in `embedding`. The model ignores the `taskType` parameter, so the task goes into the text: documents are embedded as `title: none | text: …` and queries as `task: search result | query: …`. On our own test set of 22 incidents and 18 English and Vietnamese queries, this kept top-1 accuracy at 100% and raised cross-language recall@3 from 0.06 to 0.62. Two search indexes cover the collection:
+When an incident closes, the brain writes its memory text (scope, signals, cause, supporting evidence, actions, outcome and the AI summary) and embeds it with Gemini (`gemini-embedding-2`, 768 dimensions, returned already normalised) and stores it in `embedding`. The model ignores the `taskType` parameter, so the task goes into the text: documents are embedded as `title: none | text: …` and queries as `task: search result | query: …`. On our own test set of 22 incidents and 18 English and Vietnamese queries, this kept top-1 accuracy at 100% and raised cross-language recall@3 from 0.06 to 0.62. Two search indexes cover the collection:
 
 ```json
 // incident_vectors (vectorSearch)
@@ -126,7 +127,7 @@ When an incident resolves, the brain embeds its summary with Gemini (`gemini-emb
 
 // incident_text (search)
 { "mappings": { "dynamic": false, "fields": {
-    "summary": { "type": "string" }, "postmortem_md": { "type": "string" } } } }
+    "memory_text": { "type": "string" } } } }
 ```
 
 On Atlas, automated embedding with Voyage AI can replace the Gemini step; the queries stay the same.
@@ -144,6 +145,7 @@ On Atlas, automated embedding with Voyage AI can replace the Gemini step; the qu
 | `chaos` | the demo's ground truth: `kind`, `pond`, `gateway`, `farm`, `device`, `started_at`, `cleared_at` | `{ status: 1, started_at: -1 }` |
 | `events` | what a gateway did on its own (the failsafe), reported with its next batch | `_id` = batch id + index, so a retry adds nothing; TTL 30 days |
 | `counters` | `_id: "incident"`, `seq` | `$inc` gives the next `INC-0001` id |
+| `deployments` | one per API start: `service`, `version`, `started_at`, `config` | `{ service: 1, started_at: -1 }`; the brain reads it to blame a release |
 | `reports` | `{ farm, date }`, incidents, minimum DO per pond, the share of pond-minutes at safe oxygen | unique `{ farm: 1, date: 1 }` |
 
 ## Aggregation pipelines
@@ -201,14 +203,6 @@ The evidence engine reads a pond's last 15 minutes with the rate of change of DO
 
 From these it weighs each plane: an aerator switched on but drawing 0 A (pond), DO falling faster than water can lose oxygen while every aerator turns, or DO falling a lot while pH holds (sensor), and how fresh the readings are or how many gateways went quiet (data path).
 
-### Is the probe stuck?
-
-```js
-{ $setWindowFields: { partitionBy: "$meta.pond", sortBy: { ts: 1 },
-    output: { sd_5m: { $stdDevPop: "$do", window: { range: [-300, 0], unit: "second" } } } } },
-{ $match: { sd_5m: { $lt: 0.005 } } }
-```
-
 ### How much stress did the shrimp take? (oxygen debt)
 
 ```js
@@ -239,7 +233,6 @@ db.readings.aggregate([
 ])
 ```
 
-`$fill` with `method: "linear"` draws the chart across a gap that stayed empty.
 
 ### Rollups for the data lifecycle
 
@@ -329,6 +322,4 @@ Measured on the demo host on 17/10/2026 with `scripts/measure.py`, which only re
 | Storage of raw readings | 1.45 million readings in 4,200 buckets, about 346 per bucket. Each reading is 403 bytes as a document and 6.8 bytes on disk: 9.4 MB of data and 3.1 MB of indexes. Kept 14 days, that is 1.1 MB per pond. |
 | Storage of one-minute rollups | 127,000 rows in a regular collection: 149 bytes each on disk, of which the indexes are more than half (`_id`, `pond_minute` and the TTL index). Kept 180 days, that is 36.8 MB per pond. Per minute of a pond's history, a rollup row takes 3.5 times the space of the six readings it summarises. |
 
-Kept like that, the rollups were the part that did not scale: at 2,000 ponds they would have needed about 74 GB, more than the demo host's 35 GB disk. Now they are a time series collection too, written by the brain as described above. The space they take now will be measured once a few days of rows exist.
-
-Still to measure: the space the same readings take in a regular collection (`scripts/measure.py --compare`).
+Kept like that, the rollups were the part that did not scale: at 2,000 ponds they would have needed about 74 GB, more than the demo host's 35 GB disk. Now they are a time series collection too, written by the brain as described above. The space they take as a time series has not been measured yet.

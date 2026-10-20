@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** as built on 17/10/2026. Numbers come from the demo host unless marked *target*. Datadog is live on a test org: APM, logs, metrics and LLM Observability from every service, with monitors, SLOs and dashboards kept as code in `infra/datadog/`. The brain's own detection does not depend on it: everything described here also runs with Datadog unreachable.
+> **Status:** as built on 20/10/2026. Numbers come from the demo host unless marked *target*. Datadog is live on a test org: APM, logs, metrics, Database Monitoring and LLM Observability from every service, with monitors, SLOs and dashboards kept as code in `infra/datadog/`, and a notebook written for every closed incident. The brain's own detection does not depend on it: everything described here also runs with Datadog unreachable.
 
 Firstlight runs the night shift for shrimp ponds. It forecasts how many minutes each pond has before it runs short of oxygen. It works out whether an alarm comes from the pond, the probe or the data path, acts within seconds, and proves the pond recovered.
 
@@ -26,7 +26,7 @@ Firstlight runs the night shift for shrimp ponds. It forecasts how many minutes 
 ## 2. Design principles
 
 1. **Right data, right place.** MongoDB keeps every reading at full resolution, plus every command and every incident. Datadog receives low-cardinality signals: one series per pond or gateway, plus the software's own traces, logs and metrics. Its cost grows with the number of ponds, not with the number of readings.
-2. **Treat each pond as a service.** The SLI is `minutes_to_hypoxia`. The SLO is "oxygen safety" per pond: the share of pond-minutes at 4 mg/L or more. Each incident gets an MTTD, an MTTR and a postmortem: SRE practice applied to a living system.
+2. **Treat each pond as a service.** The SLI is `minutes_to_hypoxia`. The "oxygen safety" SLO is the share of time no pond is forecast to reach 3 mg/L within 30 minutes, and the dawn report adds the share of pond-minutes at 4 mg/L or more. Each incident gets an MTTD, an MTTR and a postmortem: SRE practice applied to a living system.
 3. **AI stays off the critical path.** Detection, diagnosis and safe actions are deterministic and take seconds. The gateway has its own failsafe for when the cloud is out of reach. Gemini explains and drafts, and each answer is scored.
 
 ## 3. Main flows
@@ -93,10 +93,10 @@ Every answer is scored automatically:
 - is the farmer's message plain Vietnamese without jargon?
 - in demo mode, does it match the fault that was actually injected?
 
-On the demo so far, 9 incidents were investigated:
-- The AI matched the injected fault 8 times out of 8, and so did the rules.
+On the demo, 12 incidents had been investigated by 20/10/2026:
+- The AI matched the injected fault 11 times out of 11, and so did the rules.
 - Every answer was grounded.
-- All 9 farmer messages passed.
+- All 12 farmer messages passed.
 - The one incident the rules could not explain was marked "explained unknown" rather than scored.
 
 ### D. Response: a closed loop through MongoDB
@@ -248,7 +248,7 @@ A key has at most one open incident; later alerts for the same key join it. Each
 | One Python image, three processes | Simple to build and maintain, while Datadog still sees separate `edge`, `api` and `brain` services. |
 | Docker Compose on one VM | One command to run anywhere. Long-lived change streams and SSE need a process that stays up. |
 | MongoDB on the same host | No network hop on the hot path, no shared-tier limits on operations, storage or transfer, and Datadog Database Monitoring works (on Atlas it needs M10 or larger). Pinned to 8.0, the long-term-support release. |
-| Pinned image versions | `mongodb-atlas-local:8.0.34`, `datadog/agent:7.84.3`, `caddy:2.11.7`, `python:3.12.15-slim`, `nginx:1.30.6-alpine`: every deploy runs exactly what was tested. |
+| Pinned image versions | `mongodb-atlas-local:8.0.34`, `gcr.io/datadoghq/agent:7.84.3`, `caddy:2.11.7`, `python:3.12.15-slim`, `nginx:1.30.6-alpine`: every deploy runs exactly what was tested. |
 
 ## 9. Repository layout
 
@@ -263,11 +263,13 @@ web/          React console
 infra/
   caddy/      Caddyfile for the demo host
   backup/     nightly mongodump and its cron entry
+  datadog/    monitors, SLOs, dashboards and the webhook as code, and apply.py that creates them
 docs/         this documentation
 tests/        unit and integration tests (atlas-local)
 compose.yaml  one file for laptop and VM; COMPOSE_PROFILES picks localdb, datadog, app, proxy
 Makefile      make up, down, logs, config, mongosh
-scripts/      vps-bootstrap.sh, deploy.sh, release.sh, measure.py, loadtest.sh
+scripts/      vps-bootstrap.sh, deploy.sh, release.sh, datadog-apply.sh, datadog-dbm.sh, measure.py,
+              loadtest.sh, and hooks/ (the pre-commit and commit-msg checks)
 ```
 
 ## Further reading

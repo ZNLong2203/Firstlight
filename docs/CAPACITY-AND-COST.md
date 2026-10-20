@@ -39,7 +39,7 @@ The custom metrics per pond are:
 - six gauges tagged with the pond: oxygen, temperature, pH, aerators off, minutes to hypoxia and freshness;
 - the gateway's ingest-lag distribution, which counts five times, and its readings count, both shared by the farm's ponds, four on average.
 
-The Gemini cost comes from the demo's 9 investigations so far:
+The Gemini cost comes from the demo's first 9 investigations, on 17 and 18 October:
 - to investigate, 11,500 input tokens and 500 output tokens on average;
 - for the postmortem, 1,700 input and 500 output.
 
@@ -58,5 +58,5 @@ A 3,000 m² pond at day 90 holds about 5 tonnes of shrimp. At the farm-gate pric
 | The VM | [hosthatch.com/products](https://hosthatch.com/products): "NVMe 8 GB", from $9.00 a month |
 | Datadog | [datadoghq.com/pricing](https://www.datadoghq.com/pricing/) and the [list page](https://www.datadoghq.com/pricing/list/). The $5 per 100 custom metrics is on the list page only; the main page says to contact sales. How metrics are counted: [custom metrics billing](https://docs.datadoghq.com/account_management/billing/custom_metrics/), where a distribution counts five times per tag combination, ten with percentiles. |
 | Vertex AI | [Generative AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing): Gemini 3.8 Flash at $0.75 / $3.75 per million tokens until 31/12/2026, then $1.50 / $7.50; reasoning is billed as output |
-| Load tests | `scripts/loadtest.sh 250 4` and `scripts/loadtest.sh 500 5`, on the demo host |
+| Load test | `scripts/loadtest.sh 250 4`, on the demo host |
 | Token counts | the demo's investigations, from `GET /v1/incidents` |

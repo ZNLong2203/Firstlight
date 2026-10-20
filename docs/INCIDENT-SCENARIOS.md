@@ -136,8 +136,8 @@ Measured run, incident INC-0004, farm KG-01:
 
 ## Ground truth and evaluation
 
-The chaos registry (`chaos`) records every injected fault with its pond, device and start time. The brain never reads it while it investigates. In every measured run above, the diagnosis matched the injected fault. The AI investigator never reads it either. Once an incident closes, both diagnoses are compared with the registry: the investigator's is scored as `rca_correct` in Datadog LLM Observability, and the console reports the accuracy across all runs rather than a single example. On 19 October 2026 that was 10 of 10 for the investigator and 10 of 10 for the rules.
+The chaos registry (`chaos`) records every injected fault with its pond, device and start time. The brain never reads it while it investigates. In every measured run above, the diagnosis matched the injected fault. The AI investigator never reads it either. Once an incident closes, both diagnoses are compared with the registry: the investigator's is scored as `rca_correct` in Datadog LLM Observability, and the console reports the accuracy across all runs rather than a single example. On 20 October 2026 that was 11 of 11 for the investigator and 11 of 11 for the rules.
 
 ## Outside demo mode
 
-The same checks run on every real incident. Without a chaos registry there is no automatic score; instead the operator confirms or corrects the diagnosis in the console, and that answer becomes the evaluation.
+The same checks run on every real incident, but without a chaos registry there is no automatic score. The plan is for the operator to confirm or correct the diagnosis in the console, and for that answer to become the evaluation; that control is not built yet.
