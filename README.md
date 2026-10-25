@@ -11,6 +11,26 @@ The code in this repository was written in the build window, 17 to 31 October 20
 
 ![The console at night: 200 ponds on 50 farms, coloured by dissolved oxygen](docs/images/console-ponds.png)
 
+## The problem
+
+Dissolved oxygen in a shrimp pond falls through the night. At dusk the algae stop producing oxygen, while the shrimp, the algae and the bacteria keep breathing, so the lowest point comes just before dawn. Aerators keep the pond alive until then, and when one fails the pond can run short within the hour: in the simulator, 19 of 20 ponds that lost their main aerator fell below 3 mg/L, where white-leg shrimp start to suffer, inside an hour.
+
+Most pond alarms fire on a threshold. They go off once the oxygen is already low, and just the same when a probe is fouled or a gateway loses its 4G link, so the farmer is woken at 2 a.m. for nothing. Nobody can watch hundreds of ponds all night, and a 3,000 m² pond at day 90 holds about 5 tonnes of shrimp, worth about 575 million VND.
+
+## Use case
+
+Firstlight watches every pond of a farm or a cooperative through the night, for the people who would otherwise have to stay awake:
+
+| Who | What they get |
+|---|---|
+| The farmer | one plain Vietnamese message on Telegram saying what happened and what was done, an acknowledge button, and a report at dawn |
+| The technician | a ticket for the aerator to repair, the probe to clean or the gateway to check, with its evidence |
+| The engineer running the platform | the console and Datadog, and when the software itself fails, a message naming the release to roll back to |
+
+A night on the demo: at 03:19 the main aerator of pond BL-01-A3 stopped. Five seconds later Firstlight had opened an incident, ruled out the probe, the data path and a power cut, and started the standby aerator, which the gateway confirmed a second later. The owner got one message. The pond never went below 4.55 mg/L, and the incident closed 2.2 minutes after the fault, with its proof written to a Datadog notebook. Later that night a fouled probe was recognised as a false alarm, and nobody was woken.
+
+It is meant for those who already reach the ponds: aquaculture IoT vendors adding monitoring and automatic response to the probes and gateways they install, cooperatives that want one screen for many farms and a dawn report for each owner, and agricultural insurers who need each incident's data and proof of recovery.
+
 ## What it does
 
 - **Forecasts every pond every 10 s.** One MongoDB aggregation fits the oxygen trend of all 200 ponds in 345 ms. It restarts the fit when an aerator stops or a probe is cleaned, and gives the minutes left before the pond drops below 3 mg/L.
