@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** as built on 20/10/2026. Numbers come from the demo host unless marked *target*. Datadog is live on a test org: APM, logs, metrics, Database Monitoring and LLM Observability from every service, with monitors, SLOs and dashboards kept as code in `infra/datadog/`, and a notebook written for every closed incident. The brain's own detection does not depend on it: everything described here also runs with Datadog unreachable.
+> **Status:** as built on 20/10/2026. Numbers come from the demo host unless marked *target*. Datadog is live on a trial org (the demo moved to a second one on 6/11/2026, when the first trial ended): APM, logs, metrics, Database Monitoring and LLM Observability from every service, with monitors, SLOs and dashboards kept as code in `infra/datadog/`, and a notebook written for every closed incident. The brain's own detection does not depend on it: everything described here also runs with Datadog unreachable.
 
 Firstlight runs the night shift for shrimp ponds. It forecasts how many minutes each pond has before it runs short of oxygen. It works out whether an alarm comes from the pond, the probe or the data path, acts within seconds, and proves the pond recovered.
 
@@ -93,10 +93,10 @@ Every answer is scored automatically:
 - is the farmer's message plain Vietnamese without jargon?
 - in demo mode, does it match the fault that was actually injected?
 
-On the demo, 15 incidents had been investigated by 20/10/2026:
-- The AI matched the injected fault 14 times out of 14, and so did the rules.
+On the demo, 19 incidents had been investigated by 6/11/2026:
+- The AI matched the injected fault 18 times out of 18, and so did the rules.
 - Every answer was grounded.
-- All 15 farmer messages passed.
+- All 19 farmer messages passed.
 - The one incident the rules could not explain was marked "explained unknown" rather than scored.
 
 ### D. Response: a closed loop through MongoDB

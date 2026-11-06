@@ -1,6 +1,6 @@
 # Datadog observability
 
-> **Status:** live on a Datadog test org (site ap1) since 18/10/2026. The Agent collects APM traces from the three services, DogStatsD metrics, JSON logs carrying trace ids, and the investigator's LLM Observability spans and evaluations. Monitors, SLOs, dashboards and the webhook are code in `infra/datadog/`, applied with `scripts/datadog-apply.sh`, and every closed incident writes its notebook (*Proof of recovery*). RUM is built into the console and switches on once a RUM application's id and client token are set.
+> **Status:** live on a Datadog trial org (site ap1). It reported to a first org from 18/10/2026 and, once that trial ended at the start of November, to a second one from 6/11/2026, rebuilt from `infra/datadog/` (see *Applying it, and moving to another org*). The Agent collects APM traces from the three services, DogStatsD metrics, JSON logs carrying trace ids, and the investigator's LLM Observability spans and evaluations. Monitors, SLOs, dashboards and the webhook are code in `infra/datadog/`, applied with `scripts/datadog-apply.sh`, and every closed incident writes its notebook (*Proof of recovery*). RUM is built into the console and switches on once a RUM application's id and client token are set.
 
 ![Observability with Datadog](images/datadog-observability.png)
 
@@ -148,10 +148,10 @@ Before the agent starts, the three most similar closed incidents are found by hy
 | `farmer_message_ok` | categorical | Vietnamese, at most 320 characters, names the pond or farm, no internal jargon | the message a farmer reads at 2 a.m. stays short and plain |
 | `rca_correct` | categorical, demo mode | the agent's cause compared with the fault injected from the chaos panel, or with the release that carried the regression | accuracy against ground truth; the rules are scored the same way, side by side |
 
-On the demo, 15 incidents had been investigated by 20/10/2026:
-- the agent and the rules each matched the injected fault 14 times out of 14;
+On the demo, 19 incidents had been investigated by 6/11/2026:
+- the agent and the rules each matched the injected fault 18 times out of 18;
 - every answer was grounded;
-- all 15 farmer messages passed.
+- all 19 farmer messages passed.
 
 The console's AI panel shows these numbers from `GET /v1/incidents/ai/stats`.
 
@@ -173,6 +173,6 @@ Every closed incident gets a notebook, written by the brain through `POST /api/v
 
 The link is stored on the incident and shown under its proof in the console. The call has a 15 s timeout and runs beside the brain's loop, never inside it; a refused notebook is tried twice more. The brain needs `DD_API_KEY` and `DD_APP_KEY` for it; an application key scoped to `notebooks_write` is enough.
 
-## Before the trial ends
+## When the trial ends
 
-Datadog data from a trial does not outlive it. The setup lives as code in `infra/datadog/` and can be recreated in another org with one command, and the demo video is recorded while the data is there.
+Datadog data from a trial does not outlive it. The first trial ended at the start of November, and on 6/11/2026 the demo moved to a second org by the steps above: new keys in the host's `.env`, `docker compose up -d`, `scripts/datadog-apply.sh`. The incident scenarios were then run again, so the new org holds traces, evaluations and notebooks. The first org's history was not carried over: the demo video and the figures in these documents were recorded and measured while that org held the data.
