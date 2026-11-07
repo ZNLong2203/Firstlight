@@ -9,6 +9,8 @@ The code in this repository was written in the build window, 17 to 31 October 20
 
 **Live demo:** <https://167-104-100-185.sslip.io>. 200 simulated ponds on 50 farms run around the clock on Vietnam time. The console is read-only; the chaos panel, which injects real faults, asks for a demo code.
 
+**Demo video:** <https://www.youtube.com/watch?v=WBECKtFp_Wc> (four minutes, narrated in Vietnamese: three incidents on the live system, then the Datadog and MongoDB views behind them).
+
 ![The console at night: 200 ponds on 50 farms, coloured by dissolved oxygen](docs/images/console-ponds.png)
 
 ## The problem
