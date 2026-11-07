@@ -2,20 +2,29 @@
   "title": "Firstlight · AI investigator",
   "description": "Gemini's second opinion on every incident: how often it runs, how long it takes, and how often it is right by the fault that was really injected. Managed by infra/datadog/apply.py.",
   "layout_type": "ordered",
+  "reflow_type": "fixed",
   "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
   "widgets": [
     {
+      "layout": { "x": 0, "y": 0, "width": 4, "height": 2 },
       "definition": {
         "type": "query_value",
         "title": "Investigations finished",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "sum:firstlight.ai.investigations{$env,status:done}.as_count()", "aggregator": "sum" }],
-        "precision": 0
+        "precision": 0,
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 4, "y": 0, "width": 4, "height": 2 },
       "definition": {
         "type": "query_value",
         "title": "Right by the injected fault, %",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [
           {
             "response_format": "scalar",
@@ -37,13 +46,46 @@
           }
         ],
         "precision": 0,
-        "autoscale": false
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 8, "y": 0, "width": 4, "height": 2 },
+      "definition": {
+        "type": "query_value",
+        "title": "Gemini cost, USD (LLM Observability estimate)",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [
+          {
+            "q": "sum:ml_obs.span.llm.total.cost{$env,ml_app:firstlight-investigator}.as_count() / 1000000000",
+            "aggregator": "sum"
+          }
+        ],
+        "precision": 3,
+        "autoscale": true,
+        "text_align": "center"
+      }
+    },
+    {
+      "layout": { "x": 0, "y": 2, "width": 6, "height": 4 },
+      "definition": {
+        "type": "timeseries",
+        "title": "Scored against the injected fault",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [{ "q": "sum:firstlight.ai.rca{$env} by {result}.as_count()", "display_type": "bars" }]
+      }
+    },
+    {
+      "layout": { "x": 6, "y": 2, "width": 6, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "Investigation time, s",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -54,17 +96,12 @@
       }
     },
     {
-      "definition": {
-        "type": "timeseries",
-        "title": "Scored against the injected fault",
-        "show_legend": true,
-        "requests": [{ "q": "sum:firstlight.ai.rca{$env} by {result}.as_count()", "display_type": "bars" }]
-      }
-    },
-    {
+      "layout": { "x": 0, "y": 6, "width": 6, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "Gemini tokens, by model",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -79,22 +116,12 @@
       }
     },
     {
-      "definition": {
-        "type": "query_value",
-        "title": "Gemini cost, USD (LLM Observability estimate)",
-        "requests": [
-          {
-            "q": "sum:ml_obs.span.llm.total.cost{$env,ml_app:firstlight-investigator}.as_count() / 1000000000",
-            "aggregator": "sum"
-          }
-        ],
-        "precision": 3
-      }
-    },
-    {
+      "layout": { "x": 6, "y": 6, "width": 6, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "Gemini call time, s, by model",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -105,6 +132,7 @@
       }
     },
     {
+      "layout": { "x": 0, "y": 9, "width": 12, "height": 2 },
       "definition": {
         "type": "note",
         "content": "Every investigation is a trace in **LLM Observability** (ml app `firstlight-investigator`): the agent span, each read-only tool it called, the Gemini calls with their tokens, and five evaluations — agrees with the rules, explains an unknown, grounded, farmer message OK, and right by the injected fault.",

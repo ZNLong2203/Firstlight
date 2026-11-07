@@ -2,12 +2,16 @@
   "title": "Firstlight · Data plane",
   "description": "The software that watches the ponds: ingest by version, freshness, the brain's cycle, commands, MongoDB and the logs. Managed by infra/datadog/apply.py.",
   "layout_type": "ordered",
+  "reflow_type": "fixed",
   "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
   "widgets": [
     {
+      "layout": { "x": 0, "y": 0, "width": 6, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "Ingest requests per second, by version",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -18,9 +22,12 @@
       }
     },
     {
+      "layout": { "x": 6, "y": 0, "width": 6, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "Ingest latency p95, s, by version",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -32,16 +39,22 @@
       }
     },
     {
+      "layout": { "x": 0, "y": 4, "width": 4, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "Readings stored per second",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "sum:firstlight.ingest.readings{$env}.as_rate()", "display_type": "bars" }]
       }
     },
     {
+      "layout": { "x": 4, "y": 4, "width": 4, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "How old a batch is when it lands, s",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -59,16 +72,22 @@
       }
     },
     {
+      "layout": { "x": 8, "y": 4, "width": 4, "height": 4 },
       "definition": {
         "type": "toplist",
         "title": "Stalest gateways, seconds since a reading",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "top(max:firstlight.pond.freshness_seconds{$env} by {gateway}, 10, 'last', 'desc')" }]
       }
     },
     {
+      "layout": { "x": 0, "y": 8, "width": 4, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "The brain's cycle, s",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -87,31 +106,53 @@
       }
     },
     {
+      "layout": { "x": 4, "y": 8, "width": 4, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "Command acknowledged by the gateway, ms",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [{ "q": "avg:firstlight.command.ack_latency_ms{$env} by {action}", "display_type": "line" }]
       }
     },
     {
+      "layout": { "x": 8, "y": 8, "width": 4, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "MongoDB calls per second, by service",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [{ "q": "sum:trace.pymongo.cmd.hits{$env} by {service}.as_rate()", "display_type": "line" }]
       }
     },
     {
+      "layout": { "x": 0, "y": 11, "width": 12, "height": 3 },
       "definition": {
-        "type": "log_stream",
-        "title": "Warnings and errors",
-        "query": "service:firstlight-* status:(warn OR error)",
-        "columns": ["host", "service"],
-        "show_date_column": true,
-        "show_message_column": true,
-        "message_display": "expanded-md",
-        "sort": { "column": "time", "order": "desc" }
+        "type": "timeseries",
+        "title": "Warnings and errors from the services, per minute",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [
+          {
+            "display_type": "bars",
+            "style": { "palette": "warm" },
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "logs",
+                "name": "q",
+                "search": { "query": "env:__ENV__ service:firstlight-* status:(warn OR error)" },
+                "indexes": ["*"],
+                "group_by": [{ "facet": "status", "limit": 5, "sort": { "aggregation": "count", "order": "desc" } }],
+                "compute": { "aggregation": "count" }
+              }
+            ],
+            "formulas": [{ "formula": "q" }]
+          }
+        ]
       }
     }
   ]
