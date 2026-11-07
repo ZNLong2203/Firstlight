@@ -2,12 +2,16 @@
   "title": "Firstlight · Night watch",
   "description": "The ponds as services: oxygen across the estate, the ponds closest to 3 mg/L, the incidents and their proof. Managed by infra/datadog/apply.py.",
   "layout_type": "ordered",
+  "reflow_type": "fixed",
   "template_variables": [{ "name": "env", "prefix": "env", "available_values": [], "default": "__ENV__" }],
   "widgets": [
     {
+      "layout": { "x": 0, "y": 0, "width": 2, "height": 2 },
       "definition": {
         "type": "query_value",
         "title": "Lowest oxygen now, mg/L",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [
           {
             "q": "min:firstlight.pond.do{$env}",
@@ -20,13 +24,17 @@
           }
         ],
         "precision": 2,
-        "autoscale": false
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 2, "y": 0, "width": 2, "height": 2 },
       "definition": {
         "type": "query_value",
-        "title": "Soonest pond to 3 mg/L, minutes",
+        "title": "Soonest pond to 3 mg/L, min",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [
           {
             "q": "min:firstlight.pond.minutes_to_hypoxia{$env}",
@@ -39,29 +47,69 @@
           }
         ],
         "precision": 0,
-        "autoscale": false
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 4, "y": 0, "width": 2, "height": 2 },
       "definition": {
         "type": "query_value",
         "title": "Incidents opened",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "sum:firstlight.incident.opened{$env}.as_count()", "aggregator": "sum" }],
-        "precision": 0
+        "precision": 0,
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 6, "y": 0, "width": 2, "height": 2 },
       "definition": {
         "type": "query_value",
-        "title": "False alarms stopped, nobody woken",
+        "title": "False alarms stopped",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "sum:firstlight.false_alarm.prevented{$env}.as_count()", "aggregator": "sum" }],
-        "precision": 0
+        "precision": 0,
+        "autoscale": true,
+        "text_align": "center"
       }
     },
     {
+      "layout": { "x": 8, "y": 0, "width": 2, "height": 2 },
+      "definition": {
+        "type": "query_value",
+        "title": "Time to detect, s (average)",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [{ "q": "avg:firstlight.incident.mttd_s{$env}", "aggregator": "avg" }],
+        "precision": 0,
+        "autoscale": true,
+        "text_align": "center"
+      }
+    },
+    {
+      "layout": { "x": 10, "y": 0, "width": 2, "height": 2 },
+      "definition": {
+        "type": "query_value",
+        "title": "Time to recover, min (average)",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [{ "q": "avg:firstlight.incident.mttr_min{$env}", "aggregator": "avg" }],
+        "precision": 1,
+        "autoscale": true,
+        "text_align": "center"
+      }
+    },
+    {
+      "layout": { "x": 0, "y": 2, "width": 8, "height": 4 },
       "definition": {
         "type": "timeseries",
         "title": "Oxygen across the estate, mg/L",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "legend_layout": "horizontal",
         "requests": [
@@ -85,23 +133,22 @@
       }
     },
     {
-      "definition": {
-        "type": "toplist",
-        "title": "Closest to 3 mg/L, minutes (600 = no risk in sight)",
-        "requests": [{ "q": "top(min:firstlight.pond.minutes_to_hypoxia{$env} by {pond}, 10, 'last', 'asc')" }]
-      }
-    },
-    {
+      "layout": { "x": 8, "y": 2, "width": 4, "height": 4 },
       "definition": {
         "type": "toplist",
         "title": "Least oxygen now, by pond",
+        "title_size": "16",
+        "title_align": "left",
         "requests": [{ "q": "top(min:firstlight.pond.do{$env} by {pond}, 10, 'last', 'asc')" }]
       }
     },
     {
+      "layout": { "x": 0, "y": 6, "width": 4, "height": 3 },
       "definition": {
         "type": "timeseries",
         "title": "Incidents by cause",
+        "title_size": "16",
+        "title_align": "left",
         "show_legend": true,
         "requests": [
           {
@@ -113,25 +160,12 @@
       }
     },
     {
-      "definition": {
-        "type": "query_value",
-        "title": "Time to detect, s (average)",
-        "requests": [{ "q": "avg:firstlight.incident.mttd_s{$env}", "aggregator": "avg" }],
-        "precision": 0
-      }
-    },
-    {
-      "definition": {
-        "type": "query_value",
-        "title": "Time to recover, min (average)",
-        "requests": [{ "q": "avg:firstlight.incident.mttr_min{$env}", "aggregator": "avg" }],
-        "precision": 1
-      }
-    },
-    {
+      "layout": { "x": 4, "y": 6, "width": 4, "height": 3 },
       "definition": {
         "type": "slo",
         "title": "Oxygen safety",
+        "title_size": "16",
+        "title_align": "left",
         "slo_id": "__SLO:oxygen_safety__",
         "view_type": "detail",
         "view_mode": "overall",
@@ -140,9 +174,12 @@
       }
     },
     {
+      "layout": { "x": 8, "y": 6, "width": 4, "height": 3 },
       "definition": {
         "type": "slo",
         "title": "Every pond seen",
+        "title_size": "16",
+        "title_align": "left",
         "slo_id": "__SLO:visibility__",
         "view_type": "detail",
         "view_mode": "overall",
@@ -151,9 +188,22 @@
       }
     },
     {
+      "layout": { "x": 0, "y": 9, "width": 6, "height": 4 },
+      "definition": {
+        "type": "toplist",
+        "title": "Closest to 3 mg/L, minutes (600 = no risk in sight)",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [{ "q": "top(min:firstlight.pond.minutes_to_hypoxia{$env} by {pond}, 10, 'last', 'asc')" }]
+      }
+    },
+    {
+      "layout": { "x": 6, "y": 9, "width": 6, "height": 4 },
       "definition": {
         "type": "manage_status",
         "title": "Firstlight monitors",
+        "title_size": "16",
+        "title_align": "left",
         "query": "tag:\"firstlight:managed\"",
         "summary_type": "monitors",
         "display_format": "countsAndList",
